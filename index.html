@@ -201,6 +201,14 @@ function trackOptionsFor(sub){
   const existing = Object.keys((remaining[sub] && remaining[sub].tracks) || (master[sub] && master[sub].tracks) || {});
   return Array.from(new Set([...always, ...existing])).sort((a,b)=>trackRank(a)-trackRank(b));
 }
+// Like trackOptionsFor(), but without the common-type padding -- just the
+// tracks this specific subdivision actually has in its master data. Used by
+// the manual "Log tested miles" dropdown, so a subdivision with only a Main
+// track isn't offered Siding/Xover/Yard options it doesn't have.
+function existingTrackOptionsFor(sub){
+  const existing = Object.keys((remaining[sub] && remaining[sub].tracks) || (master[sub] && master[sub].tracks) || {});
+  return existing.sort((a,b)=>trackRank(a)-trackRank(b));
+}
 function totalMiles(intervals){ return intervals.reduce((s,[lo,hi])=>s+(hi-lo),0); }
 function parseSidingRange(label){
   const m = String(label).match(/\(([\d.]+)-([\d.]+)\)/);
@@ -722,13 +730,14 @@ function updateLogTrackOptions(){
   const trackSel = document.getElementById('sel-track');
   if(!subSel || !trackSel) return;
   const cur = trackSel.value;
-  const opts = trackOptionsFor(subSel.value);
-  trackSel.innerHTML = opts.map(t=>`<option ${t===cur?'selected':''}>${t}</option>`).join('');
+  const opts = existingTrackOptionsFor(subSel.value);
+  trackSel.innerHTML = opts.length ? opts.map(t=>`<option ${t===cur?'selected':''}>${t}</option>`).join('') : `<option value="">No tracks set up yet</option>`;
 }
 async function logTested(){
   const sub = document.getElementById('sel-sub').value;
   const track = document.getElementById('sel-track').value;
   const a = document.getElementById('in-from').value, b = document.getElementById('in-to').value;
+  if(!track){ toast('This subdivision has no tracks yet — add one in Edit master data below'); return; }
   if(a===''||b===''||isNaN(a)||isNaN(b)){ toast('Enter both mileposts'); return; }
   const range = normalize(a,b);
   remaining[sub].tracks[track] = subtractInterval(remaining[sub].tracks[track]||[], range);
@@ -1159,6 +1168,34 @@ async function removeMasterTrack(sub, track){
   toast(`Removed ${track}`);
   render();
 }
+// Fixes a typo in a track name after the fact, without losing that track's
+// segments, skippable flag, remaining mileage, or its past "Recently tested"
+// history entries -- all of those are keyed by the old name and get moved
+// over to the new one.
+async function renameMasterTrack(sub, oldName, newName){
+  newName = (newName||'').trim();
+  if(!newName){ toast('Enter a track name'); return; }
+  if(newName === oldName){ render(); return; }
+  if(master[sub].tracks[newName]){ toast('That track name already exists'); return; }
+  master[sub].tracks[newName] = master[sub].tracks[oldName];
+  delete master[sub].tracks[oldName];
+  if(master[sub].skippableTracks){
+    const si = master[sub].skippableTracks.indexOf(oldName);
+    if(si>-1) master[sub].skippableTracks[si] = newName;
+  }
+  await saveMaster(sub);
+  if(remaining[sub] && remaining[sub].tracks && remaining[sub].tracks[oldName]!==undefined){
+    remaining[sub].tracks[newName] = remaining[sub].tracks[oldName];
+    delete remaining[sub].tracks[oldName];
+    await saveRemaining(sub);
+  }
+  let historyChanged = false;
+  (history.entries||[]).forEach(e=>{ if(e.sub===sub && e.track===oldName){ e.track = newName; historyChanged = true; } });
+  if(historyChanged) await saveHistory();
+  if(ui.lastSub===sub && ui.lastTrack===oldName){ ui.lastTrack = newName; await saveUi(); }
+  toast(`Renamed ${oldName} to ${newName}`);
+  render();
+}
 async function editMasterSiding(sub, idx, name, lo, hi){
   if(!name || !name.trim() || isNaN(lo) || isNaN(hi)){ toast('Enter a name and both mileposts'); return; }
   const range = normalize(lo, hi);
@@ -1308,7 +1345,10 @@ function masterEditHtml(){
       tracks.forEach(t=>{
         const isSkippable = ((master[sub].skippableTracks)||[]).includes(t);
         h += `<div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-          <span class="section-title" style="margin:0;font-size:13px">${t}</span>
+          <span style="display:flex;align-items:center;gap:6px;flex:1 1 170px;min-width:150px">
+            <input id="me-trackname-${sub}-${t}" value="${escapeHtml(t)}" style="margin:0;max-width:150px;padding:5px 8px;font-weight:600;font-size:13px">
+            <button class="secondary" style="padding:2px 8px;font-size:11px" onclick="renameMasterTrack('${sub}','${t}',document.getElementById('me-trackname-${sub}-${t}').value)">Rename</button>
+          </span>
           <span style="display:flex;gap:6px">
             <button class="secondary" style="padding:2px 8px;font-size:11px" onclick="toggleTrackSkippable('${sub}','${t}')">${isSkippable?'Skippable ✓ — tap to undo':'Make skippable per cycle'}</button>
             <button class="danger" style="padding:2px 8px;font-size:11px" onclick="removeMasterTrack('${sub}','${t}')">Remove track</button>
@@ -1702,7 +1742,7 @@ function render(){
     </div>`;
   if(logSectionOpen){
     html += `<label>Subdivision</label><select id="sel-sub" onchange="updateLogTrackOptions()">${SUBS.map(s=>`<option value="${s}" ${s===ui.lastSub?'selected':''}>${s}</option>`).join('')}</select>
-    <label>Track</label><select id="sel-track">${trackOptionsFor(ui.lastSub||SUBS[0]).map(t=>`<option ${t===ui.lastTrack?'selected':''}>${t}</option>`).join('')}</select>
+    <label>Track</label><select id="sel-track">${(()=>{ const opts = existingTrackOptionsFor(ui.lastSub||SUBS[0]); return opts.length ? opts.map(t=>`<option ${t===ui.lastTrack?'selected':''}>${t}</option>`).join('') : `<option value="">No tracks set up yet</option>`; })()}</select>
     <div class="row"><div><label>From MP</label><input id="in-from" type="number" step="0.01"></div>
     <div><label>To MP</label><input id="in-to" type="number" step="0.01"></div></div>
     <button onclick="logTested()">Log tested range</button>`;
