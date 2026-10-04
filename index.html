@@ -279,6 +279,22 @@ function mergeContiguous(intervals, eps=0.02){
   return merged;
 }
 function fmt(n){ return Math.round(n*100)/100; }
+// Total miles tested today across every subdivision/track (only entries stamped
+// today). Overlapping/touching ranges on the same sub+track are merged first so
+// the same stretch is never counted twice. Checklist-only entries have no
+// mileage and are skipped.
+function todayMilesTested(){
+  const todayStr = new Date().toDateString();
+  const groups = {};
+  history.entries.forEach(e=>{
+    if(new Date(e.ts).toDateString()!==todayStr) return;
+    if(!e.track || !isFinite(e.lo) || !isFinite(e.hi)) return;
+    (groups[e.sub+'\u0000'+e.track] = groups[e.sub+'\u0000'+e.track]||[]).push([e.lo, e.hi]);
+  });
+  let total = 0;
+  Object.values(groups).forEach(list=>{ mergeContiguous(list).forEach(([lo,hi])=>{ total += hi-lo; }); });
+  return Math.round(total*100)/100;
+}
 function deepCopy(o){ return JSON.parse(JSON.stringify(o)); }
 
 function toast(msg){
@@ -1776,7 +1792,7 @@ function render(){
       : `<div class="seg-list">Nothing here</div>`;
     const todayOpen = ui.historyOpen ? ui.historyOpen.today !== false : true;
     const earlierOpen = ui.historyOpen ? !!ui.historyOpen.earlier : false;
-    html += `<details ${todayOpen?'open':''} ontoggle="setHistoryOpen('today', this.open)"><summary>Today (${todayEntries.length})</summary>${rowsFor(todayEntries)}</details>`;
+    html += `<details ${todayOpen?'open':''} ontoggle="setHistoryOpen('today', this.open)"><summary>Today (${todayEntries.length}) · <strong>${fmt(todayMilesTested())} mi tested</strong></summary>${rowsFor(todayEntries)}</details>`;
     html += `<details ${earlierOpen?'open':''} ontoggle="setHistoryOpen('earlier', this.open)"><summary>Earlier (${earlierEntries.length})</summary>${rowsFor(earlierEntries)}</details>`;
   }
   html += `</div>`;
