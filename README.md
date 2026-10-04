@@ -1,0 +1,16 @@
+# Rail Test Tracker
+
+A mobile-friendly web app for tracking rail test mileage across subdivisions (Cascade, Thompson, Shuswap, Page, Mission, Westminster) — remaining miles by track type, Sidings/Xovers checklists, daily XML report import, and a running log of what's been tested.
+
+**Live app:** https://claude.ai/artifact/D4Qav1bP5prPX3Hs5e7UNi
+
+## What's here
+
+- `index.html` — the entire app: a single self-contained HTML/CSS/JS file.
+- `apple-touch-icon.png` — the icon used when the app is added to an iPhone home screen.
+
+## How this repo is used
+
+This repo is a backup and change history for the app's source code. The actual running app lives on Claude's Artifact platform (the "Live app" link above), which also provides the app's data storage (remaining miles, test history, checklist state). Opening `index.html` directly from this repo (e.g. via GitHub Pages) will **not** have working data storage, since that storage is a feature of the Artifact platform, not something built into the file itself.
+
+Changes are made through a Claude conversation and pushed here afterward, so this history reflects what changed and when — independent of any single chat session.

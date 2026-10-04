@@ -1,0 +1,1762 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rail Test Tracker</title>
+<!-- iOS "Add to Home Screen": launch full-screen with no Safari chrome, use a
+     real icon instead of a screenshot, and show a short name under it. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rail Tracker">
+<meta name="theme-color" content="#1f6f54">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* base */
+  --paper:#eef0ec; --panel:#ffffff; --ink:#1b2420; --sub:#687069; --line:#dde2db;
+  /* action colors */
+  --rail:#1f6f54; --rail-dark:#15503c; --amber:#a66a1a; --rust:#a23b2e;
+  /* track identity -- one fixed hue per track type, used everywhere this track
+     type appears (dropdowns, chips, the colored edge on a track's block) so the
+     eye learns the code once and reuses it across the whole app */
+  --trk-main:#1f6f54;   --trk-main-rgb:31,111,84;
+  --trk-north:#3462a0;  --trk-north-rgb:52,98,160;
+  --trk-south:#b2791f;  --trk-south-rgb:178,121,31;
+  --trk-siding:#6d4e9c; --trk-siding-rgb:109,78,156;
+  --trk-xover:#5f6b76;  --trk-xover-rgb:95,107,118;
+  --trk-yard:#8a5a34;   --trk-yard-rgb:138,90,52;
+  --trk-other:#687069;  --trk-other-rgb:104,112,105;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --paper:#141815; --panel:#1d2320; --ink:#e9ece7; --sub:#9aa39a; --line:#2c332e; }
+}
+:root[data-theme="dark"]{ --paper:#141815; --panel:#1d2320; --ink:#e9ece7; --sub:#9aa39a; --line:#2c332e; }
+*{box-sizing:border-box;}
+html{scroll-padding-top:env(safe-area-inset-top,0px);}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,sans-serif;padding:16px;max-width:640px;margin:0 auto;}
+:focus-visible{outline:2px solid var(--rail);outline-offset:2px;}
+h1{font-family:'Barlow Semi Condensed',sans-serif;font-weight:700;font-size:23px;letter-spacing:.01em;margin:8px 0 2px;}
+.sub{color:var(--sub);font-size:13px;margin-bottom:16px;}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;}
+.subdiv-head{display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:10px;}
+.subdiv-name{font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;font-size:18px;}
+.miles-tag{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:13px;color:var(--sub);white-space:nowrap;}
+/* Track groups: separation comes from a colored edge + a tinted block + a gap
+   above/below it -- never a horizontal rule, which reads as underlining
+   whatever sits right above it. --trk is set per type by the .trk-* classes. */
+.track-group{
+  --trk:var(--trk-other); --trk-rgb:var(--trk-other-rgb);
+  border-left:3px solid var(--trk);
+  background:rgba(var(--trk-rgb),.08);
+  border-radius:0 8px 8px 0;
+  padding:8px 10px;
+  margin:10px 0;
+}
+.track-group:first-of-type{margin-top:12px;}
+.trk-main{--trk:var(--trk-main);--trk-rgb:var(--trk-main-rgb);}
+.trk-north{--trk:var(--trk-north);--trk-rgb:var(--trk-north-rgb);}
+.trk-south{--trk:var(--trk-south);--trk-rgb:var(--trk-south-rgb);}
+.trk-siding{--trk:var(--trk-siding);--trk-rgb:var(--trk-siding-rgb);}
+.trk-xover{--trk:var(--trk-xover);--trk-rgb:var(--trk-xover-rgb);}
+.trk-yard{--trk:var(--trk-yard);--trk-rgb:var(--trk-yard-rgb);}
+.track-row{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;}
+.track-row .track-name{font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;font-size:15px;color:var(--trk);}
+.track-row .track-miles{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:14px;}
+.seg-list{font-size:12px;color:var(--sub);padding:4px 0 0 0;line-height:1.6;}
+.track-group .seg-list{color:var(--ink);opacity:.75;}
+button{background:var(--rail);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;font-family:inherit;}
+button:active{background:var(--rail-dark);}
+button.secondary{background:transparent;color:var(--rail);border:1px solid var(--rail);}
+button.danger{background:var(--rust);}
+select,input{width:100%;padding:9px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font-size:14px;margin-bottom:8px;font-family:inherit;}
+label{font-size:12px;color:var(--sub);display:block;margin-bottom:2px;}
+.row{display:flex;gap:8px;}
+.row>div{flex:1;}
+.checklist-item{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;}
+.checklist-item input[type="checkbox"]{flex:0 0 16px;width:16px;height:16px;margin:0;accent-color:var(--rail);}
+.checklist-item span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* Light-weight version of the track-identity color used in "Recently tested" --
+   a thin colored edge per row (same hue as that row's track/checklist type) so
+   the log reads at a glance, without the heavier tinted block of a track-group. */
+.history-row{border-left:3px solid var(--trk, var(--line));padding-left:8px;margin:3px 0;}
+.section-title{font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;font-size:16px;margin:18px 0 8px;}
+.chip{display:inline-block;background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:2px 8px;font-size:11px;margin-left:6px;color:var(--sub);}
+.toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--rail-dark);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:10;}
+.toast.show{opacity:1;}
+details summary{cursor:pointer;font-size:13px;color:var(--rail);margin-top:4px;}
+.track-group details summary{color:var(--trk);font-weight:500;}
+</style>
+</head>
+<body>
+<div id="app"><h1>Rail Test Tracker</h1><div class="sub">Loading…</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const SUBS = ['Cascade','Thompson','Shuswap','Page','Mission','Westminster'];
+
+const DEFAULT_MASTER = {
+  Cascade: {
+    tracks: { Main:[[124.3,128.95],[0,51.75]], North:[[51.75,124.3]], South:[[51.75,124.3]] },
+    checklist: {
+      Sidings:['Choate (36.51-34.89)','Spuzzum (16.34-14.85)'],
+      Xovers:['Dunlevy','Willistion','Renfrew','Second Narrows','Barnet','Cassin','Port Moody','Westwood','MacAulay','Port Coquitlam','Smith','Pitt River','Maple Meadows','River Rd','Albion','Ruskin','Mission West','Mission Jct','Hatzic','Deroche','Magellan','North Bend']
+    }
+  },
+  Thompson: {
+    tracks: { Main:[[56.77,121.5],[26.24,52.78],[17.4,21.97],[8.69,14.32]], North:[[52.78,56.77],[21.97,26.24],[14.32,17.4],[0,8.69]], South:[[52.78,56.77],[21.97,26.24],[14.32,17.4],[0,8.69]] },
+    checklist: {
+      Sidings:['Lytton (96.2-94.62)','Toketic (64.45-62.59)','Ashcroft (48.58-46.8)','Semlin (39-37.05)','Walhachin (33.6-31.7)'],
+      Xovers:['Nepa','Tunkwa','Chuwhels','Benledi','Kamloops']
+    }
+  },
+  Shuswap: {
+    tracks: { Main:[[83.57,101.59],[57,69.08],[44.3,53.64]], 'North DT':[[69.08,81.08]], North:[[101.57,128.5],[79,83.57],[53.64,57]], South:[[101.59,128.5],[69.08,83.57],[53.64,57]] },
+    checklist: {
+      Sidings:['Chase (95.96-93.55)','Squilax (88.41-86.82)','Salmon Arm (63.48-61.11)','Annis (50.32-48.86)','Sicamous (45.69-44.31)'],
+      Xovers:['Vicars','McCracken','Bromley','Ducks','Berton']
+    }
+  },
+  Page: { tracks:{ Main:[[0,1.98],[16.31,23.7]] }, checklist:{} },
+  Mission: { tracks:{ Main:[[0,10.1]] }, checklist:{} },
+  Westminster: { tracks:{ Main:[] }, checklist:{} }
+};
+
+let db=null, master={}, remaining={}, ui={order:[], collapsed:{}}, history={entries:[]};
+
+function normalize(a,b){ a=parseFloat(a); b=parseFloat(b); return a<b?[a,b]:[b,a]; }
+// Returns only the parts of `intervals` that fall inside `range` -- the opposite
+// of subtractInterval. Used to split a track's remaining mileage between two new
+// sub-tracks without losing already-tested progress (see the Mission Main split).
+function intersectIntervals(intervals, range){
+  const [rlo,rhi] = range;
+  const out = [];
+  for(const [lo,hi] of intervals){
+    const lo2 = Math.max(lo, rlo), hi2 = Math.min(hi, rhi);
+    if(hi2 - lo2 > 0.005) out.push([lo2, hi2]);
+  }
+  return out;
+}
+function subtractInterval(intervals, sub){
+  let out=[];
+  for(const [lo,hi] of intervals){
+    if(sub[1]<=lo || sub[0]>=hi){ out.push([lo,hi]); continue; }
+    if(sub[0]>lo) out.push([lo, sub[0]]);
+    if(sub[1]<hi) out.push([sub[1], hi]);
+  }
+  return out.filter(([lo,hi])=>hi-lo>0.005);
+}
+function addIntervalBack(intervals, add){
+  const ivs = [...intervals.map(iv=>[...iv]), [...add]].sort((a,b)=>a[0]-b[0]);
+  let merged = [];
+  for(const iv of ivs){
+    if(merged.length && iv[0] <= merged[merged.length-1][1] + 0.005){
+      merged[merged.length-1][1] = Math.max(merged[merged.length-1][1], iv[1]);
+    } else {
+      merged.push(iv);
+    }
+  }
+  return merged;
+}
+function timeAgo(ts){
+  const s = Math.floor((Date.now()-ts)/1000);
+  if(s<60) return 'just now';
+  const m = Math.floor(s/60); if(m<60) return `${m}m ago`;
+  const h = Math.floor(m/60); if(h<24) return `${h}h ago`;
+  const d = Math.floor(h/24); return `${d}d ago`;
+}
+function trackRank(name){
+  if(name==='Main') return 0;
+  if(name!=='Main' && /^Main\b/.test(name)) return 0.5; // e.g. "Main (occasional)" sorts right after Main
+  if(name==='North DT') return 1;
+  if(name==='North') return 2;
+  if(name==='South') return 3;
+  if(name==='Siding') return 4;
+  if(name==='Xover') return 5;
+  if(name==='Yard') return 6;
+  return 7;
+}
+// Maps a track/checklist name to one of the app's fixed track-identity colors
+// (see the .trk-* CSS classes), so the same type always reads the same hue
+// wherever it shows up -- a track row, a Sidings/Xovers checklist block, etc.
+function trackColorClass(name){
+  const r = trackRank(name);
+  if(r===0 || r===0.5) return 'main';
+  if(r===1 || r===2) return 'north';
+  if(r===3) return 'south';
+  if(r===4 || name==='Sidings') return 'siding';
+  if(r===5 || name==='Xovers') return 'xover';
+  if(r===6) return 'yard';
+  return 'other';
+}
+// Track choices to offer for a subdivision: the common types, plus whatever
+// non-standard track (e.g. 'North DT') that specific subdivision actually has.
+// This keeps sub-specific tracks like Shuswap's North DT out of every other sub's dropdown.
+function trackOptionsFor(sub){
+  const always = ['Main','North','South','Siding','Xover','Yard'];
+  const existing = Object.keys((remaining[sub] && remaining[sub].tracks) || (master[sub] && master[sub].tracks) || {});
+  return Array.from(new Set([...always, ...existing])).sort((a,b)=>trackRank(a)-trackRank(b));
+}
+function totalMiles(intervals){ return intervals.reduce((s,[lo,hi])=>s+(hi-lo),0); }
+function parseSidingRange(label){
+  const m = String(label).match(/\(([\d.]+)-([\d.]+)\)/);
+  if(!m) return null;
+  return normalize(m[1], m[2]);
+}
+function sidingBaseName(label){
+  return String(label).replace(/\s*\([^)]*\)\s*$/,'').trim();
+}
+// Like parseSidingRange, but only matches a NUMERIC range at the very end of the
+// label, so a non-mileage trailing parenthetical (e.g. "West Smith (part of NT test)")
+// is left alone and treated as part of the name. Used for the generic
+// name+mileage checklist item editor (Xovers, or any other named checklist).
+function parseTrailingRange(label){
+  const m = String(label).match(/\(([\d.]+)-([\d.]+)\)\s*$/);
+  if(!m) return null;
+  return normalize(m[1], m[2]);
+}
+function stripTrailingRange(label){
+  return String(label).replace(/\s*\([\d.]+-[\d.]+\)\s*$/,'').trim();
+}
+// For the "Copy segments" Xovers line: drop the mileage and the "— CODE" suffix,
+// then collapse an East/West pair (e.g. "Hatzic East" / "Hatzic West") down to
+// one shared name ("Hatzic"), whether the East/West sits at the front or the end.
+function xoverBaseName(label){
+  let name = stripTrailingRange(label);
+  name = name.replace(/\s*—\s*[A-Za-z]{1,3}\d+\s*$/,'').trim();
+  name = name.replace(/\(\s*(east|west)\s*\)/gi,'').trim();
+  name = name.replace(/^(east|west)\s+/i,'').trim();
+  name = name.replace(/\s+(east|west)$/i,'').trim();
+  return name;
+}
+function sidingNamesForRange(sub, lo, hi){
+  const items = (master[sub] && master[sub].checklist && master[sub].checklist.Sidings) || [];
+  const names = [];
+  items.forEach(label=>{
+    const r = parseSidingRange(label);
+    if(r && r[1] > lo && r[0] < hi) names.push(sidingBaseName(label));
+  });
+  return names;
+}
+// Generic version of sidingNamesForRange for any named checklist (Sidings, Xovers, ...):
+// finds items in master[sub].checklist[kind] whose mileage overlaps [lo,hi] and
+// returns their display names (Xovers collapse East/West pairs via xoverBaseName).
+function itemNamesForRange(sub, kind, lo, hi){
+  const items = (master[sub] && master[sub].checklist && master[sub].checklist[kind]) || [];
+  const names = [];
+  items.forEach(label=>{
+    const rg = kind==='Sidings' ? parseSidingRange(label) : parseTrailingRange(label);
+    if(rg && rg[1] > lo-0.02 && rg[0] < hi+0.02){
+      const base = kind==='Xovers' ? xoverBaseName(label) : (kind==='Sidings' ? sidingBaseName(label) : stripTrailingRange(label));
+      if(!names.includes(base)) names.push(base);
+    }
+  });
+  return names;
+}
+// Merge touching/overlapping mileage intervals (within a small tolerance) into
+// one -- used to collapse several today's-log entries on the same track into a
+// single combined segment for the "Copy today's segments" export.
+function mergeContiguous(intervals, eps=0.02){
+  const ivs = intervals.map(iv=>[...iv]).sort((a,b)=>a[0]-b[0]);
+  const merged = [];
+  for(const iv of ivs){
+    if(merged.length && iv[0] <= merged[merged.length-1][1]+eps){
+      merged[merged.length-1][1] = Math.max(merged[merged.length-1][1], iv[1]);
+    } else merged.push([...iv]);
+  }
+  return merged;
+}
+function fmt(n){ return Math.round(n*100)/100; }
+function deepCopy(o){ return JSON.parse(JSON.stringify(o)); }
+
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),1800);
+}
+
+async function init(){
+  db = await claude.use('db');
+  if(!db){ document.getElementById('app').innerHTML='<h1>Rail Test Tracker</h1><div class="sub">Storage unavailable in this view.</div>'; return; }
+  for(const sub of SUBS){
+    let mdoc = await db.doc(`master/${sub}`).get().catch(()=>null);
+    if(!mdoc || !mdoc.exists){
+      const seed = deepCopy(DEFAULT_MASTER[sub]);
+      await db.doc(`master/${sub}`).set(seed);
+      master[sub] = seed;
+    } else master[sub] = deepCopy(mdoc.data());
+    let rdoc = await db.doc(`remaining/${sub}`).get().catch(()=>null);
+    if(!rdoc || !rdoc.exists){
+      const seed = deepCopy(master[sub]);
+      seed.checklistDone = {};
+      Object.keys(seed.checklist||{}).forEach(k=> seed.checklistDone[k] = (seed.checklist[k]||[]).map(()=>false));
+      await db.doc(`remaining/${sub}`).set(seed);
+      remaining[sub] = seed;
+    } else remaining[sub] = deepCopy(rdoc.data());
+
+    const sidingItems = (master[sub].checklist && master[sub].checklist.Sidings) || [];
+    if(!master[sub].tracks) master[sub].tracks = {};
+    if(!master[sub].tracks.Siding){
+      const ranges = sidingItems.map(parseSidingRange).filter(Boolean);
+      if(ranges.length){ master[sub].tracks.Siding = ranges; await saveMaster(sub); }
+    }
+    if(!remaining[sub].tracks) remaining[sub].tracks = {};
+    if(!remaining[sub].tracks.Siding){
+      const done = (remaining[sub].checklistDone && remaining[sub].checklistDone.Sidings) || [];
+      const ranges = [];
+      sidingItems.forEach((label,i)=>{
+        if(done[i]) return;
+        const r = parseSidingRange(label);
+        if(r) ranges.push(r);
+      });
+      if(ranges.length){ remaining[sub].tracks.Siding = ranges; await saveRemaining(sub); }
+    }
+
+    if(sub === 'Shuswap' && !master[sub]._mnsFixV1){
+      master[sub].tracks.Main = [[83.57,101.59],[57,69.08],[44.3,53.64]];
+      master[sub].tracks.North = [[101.57,128.5],[79,83.57],[69.08,81.08],[53.64,57]];
+      master[sub].tracks.South = [[101.59,128.5],[69.08,83.57],[53.64,57]];
+      master[sub]._mnsFixV1 = true;
+      await saveMaster(sub);
+      remaining[sub].tracks.Main = deepCopy(master[sub].tracks.Main);
+      remaining[sub].tracks.North = deepCopy(master[sub].tracks.North);
+      remaining[sub].tracks.South = deepCopy(master[sub].tracks.South);
+      remaining[sub]._mnsFixV1 = true;
+      await saveRemaining(sub);
+    }
+
+    if(sub === 'Shuswap' && !master[sub]._mnsFixV2){
+      master[sub].tracks.North = [[101.57,128.5],[79,83.57],[53.64,57]];
+      master[sub].tracks['North DT'] = [[69.08,81.08]];
+      master[sub]._mnsFixV2 = true;
+      await saveMaster(sub);
+      remaining[sub].tracks.North = deepCopy(master[sub].tracks.North);
+      remaining[sub].tracks['North DT'] = deepCopy(master[sub].tracks['North DT']);
+      remaining[sub]._mnsFixV2 = true;
+      await saveRemaining(sub);
+    }
+
+    if(sub === 'Shuswap' && !master[sub]._mnsFixV3){
+      const mt = master[sub].tracks;
+      master[sub].tracks = { Main: mt.Main, 'North DT': mt['North DT'], North: mt.North, South: mt.South, ...(mt.Siding?{Siding:mt.Siding}:{}) };
+      master[sub]._mnsFixV3 = true;
+      await saveMaster(sub);
+      const rt = remaining[sub].tracks;
+      remaining[sub].tracks = { Main: rt.Main, 'North DT': rt['North DT'], North: rt.North, South: rt.South, ...(rt.Siding?{Siding:rt.Siding}:{}) };
+      remaining[sub]._mnsFixV3 = true;
+      await saveRemaining(sub);
+    }
+
+    if(sub === 'Shuswap' && !master[sub]._sidingFixV1){
+      const newSidings = ['Chase (95.96-93.55)','Squilax (88.41-86.82)','Salmon Arm (63.48-61.11)','Annis (50.32-48.86)','Sicamous (45.69-44.31)'];
+      master[sub].checklist.Sidings = newSidings;
+      master[sub].tracks.Siding = newSidings.map(parseSidingRange).filter(Boolean);
+      master[sub]._sidingFixV1 = true;
+      await saveMaster(sub);
+
+      remaining[sub].checklist = remaining[sub].checklist || {};
+      remaining[sub].checklist.Sidings = deepCopy(newSidings);
+      const done = (remaining[sub].checklistDone && remaining[sub].checklistDone.Sidings) || [];
+      const remRanges = [];
+      newSidings.forEach((label,i)=>{
+        if(done[i]) return;
+        const r = parseSidingRange(label);
+        if(r) remRanges.push(r);
+      });
+      remaining[sub].tracks.Siding = remRanges;
+      remaining[sub]._sidingFixV1 = true;
+      await saveRemaining(sub);
+    }
+
+    // Mission: mp0-1.52 of Main is tested every time, but mp1.52-10.1 only
+    // occasionally. Split it into two separate tracks (rather than leaving it as
+    // one Main range) so they can be shown as two segments and so the occasional
+    // half can get its own "not testing this cycle" skip toggle -- a single track
+    // can't do that, since addIntervalBack silently re-merges two touching
+    // sub-ranges of the same track back into one.
+    if(sub === 'Mission' && master[sub].tracks && Array.isArray(master[sub].tracks.Main) && master[sub].tracks.Main.length && !master[sub]._mainSplitV1){
+      const SPLIT = 1.52;
+      const all = master[sub].tracks.Main;
+      const overallLo = Math.min(...all.map(iv=>iv[0]));
+      const overallHi = Math.max(...all.map(iv=>iv[1]));
+      if(overallHi > SPLIT){
+        const occName = 'Main (occasional)';
+        master[sub].tracks.Main = [[overallLo, SPLIT]];
+        master[sub].tracks[occName] = [[SPLIT, overallHi]];
+        if(!master[sub].skippableTracks) master[sub].skippableTracks = [];
+        if(!master[sub].skippableTracks.includes(occName)) master[sub].skippableTracks.push(occName);
+        master[sub]._mainSplitV1 = true;
+        await saveMaster(sub);
+
+        const remMainAll = (remaining[sub].tracks && remaining[sub].tracks.Main) || [];
+        remaining[sub].tracks.Main = intersectIntervals(remMainAll, [overallLo, SPLIT]);
+        remaining[sub].tracks[occName] = intersectIntervals(remMainAll, [SPLIT, overallHi]);
+        remaining[sub]._mainSplitV1 = true;
+        await saveRemaining(sub);
+      } else {
+        master[sub]._mainSplitV1 = true;
+        await saveMaster(sub);
+      }
+    }
+
+    const XOVER_CODES = {
+      Shuswap: ['Kamloops East (East) — XQ48','Kamloops East (West) — XQ49','Berton East — XQ40','Berton West — XQ41','Ducks East — XQ42','Ducks West — XQ43','Bromley East — XQ44','Bromley West — XQ45','McCracken East — XQ46','McCracken West — XQ47','Vicars East — XT92','Vicars West — XT93','Pritchard — XU55'],
+      Thompson: ['Kamloops — XQ65','Benledi East — XQ66','Benledi West — XQ67','Chuwhels East — XQ68','Chuwhels West — XQ69','Tunkwa East — XQ70','Tunkwa West — XQ71','East Nepa — XQ72','West Nepa (XCN9) — XQ73'],
+      Cascade: ['North Bend — XM96','East Megellan — XM97','West Megellan — XM98','East Deroche — XM99','West Deroche — XN01','Hatzic West — XN02','Hatzic East — XN03','Mission Junction — XN04','Mission West — XN05','Mission East — XN06','Ruskin — XN07','Albion — XN08','East River Road — XN09','West River Road — XN10','East Maple Meadows — XN11','West Maple Meadows — XN12','Pitt River — XN13','East Smith — XN14','West Smith (part of NT test) — XN15','Port Coquitlam (part of NT test) — XN16','Port Coquitlam — XN17','MacAulay — XN18','Westwood — XN19','East Port Moody — XN20','West Port Moody — XN21','Cassin — XN22','Walker — XT85','East Barnet — XN23','West Barnet — XN24','Burnaby — XU48','Second Narrows East — XN25','Second Narrows West — XN26','Renfew East — XN27','Renfew West — XN28','Williston — XN29','Dunlevy — XN30'],
+      Westminster: ['Sapperton — XR13','BN/CP Crossover Switch Cumberland — XR14','CN Crossover Mile 8.45 — XR15','SRY Crossover Mile 8.5 — XR16','SRY Crossover Mile 8.1 — XR17']
+    };
+    if(XOVER_CODES[sub] && !master[sub]._xoverFixV1){
+      const newXovers = XOVER_CODES[sub];
+      if(!master[sub].checklist) master[sub].checklist = {};
+      master[sub].checklist.Xovers = [...newXovers];
+      master[sub]._xoverFixV1 = true;
+      await saveMaster(sub);
+
+      if(!remaining[sub].checklist) remaining[sub].checklist = {};
+      remaining[sub].checklist.Xovers = [...newXovers];
+      if(!remaining[sub].checklistDone) remaining[sub].checklistDone = {};
+      remaining[sub].checklistDone.Xovers = newXovers.map(()=>false);
+      remaining[sub]._xoverFixV1 = true;
+      await saveRemaining(sub);
+    }
+
+    const XOVER_MILEAGE = {
+      Shuswap: {'Berton East — XQ40':[81.45,81.52],'Berton West — XQ41':[81.53,81.59],'Ducks East — XQ42':[109.46,109.52],'Ducks West — XQ43':[109.54,109.62],'Bromley East — XQ44':[114.15,114.22],'Bromley West — XQ45':[114.23,114.3],'McCracken East — XQ46':[121.65,121.71],'McCracken West — XQ47':[121.73,121.79],'Vicars East — XT92':[126.05,126.11],'Vicars West — XT93':[126.13,126.18],'Pritchard — XU55':[104.25,104.32]},
+      Thompson: {'East Nepa — XQ72':[54.6,54.7],'West Nepa (XCN9) — XQ73':[54.8,54.9]},
+      Cascade: {'North Bend — XM96':[0.4,0.5],'East Megellan — XM97':[63.1,63.2],'West Megellan — XM98':[63.1,63.2],'East Deroche — XM99':[72.3,72.6],'West Deroche — XN01':[72.3,72.6],'Hatzic West — XN02':[83.9,84.0],'Hatzic East — XN03':[83.9,84.0],'Mission Junction — XN04':[86.9,87.0],'Mission West — XN05':[87.9,88.0],'Mission East — XN06':[87.9,88.0],'Ruskin — XN07':[94.5,94.6],'Albion — XN08':[99.5,99.6],'East River Road — XN09':[101.3,101.4],'West River Road — XN10':[101.3,101.4],'East Maple Meadows — XN11':[106.1,106.4],'West Maple Meadows — XN12':[106.1,106.4],'Pitt River — XN13':[109.3,109.4],'East Smith — XN14':[109.9,110.2],'West Smith (part of NT test) — XN15':[109.9,110.2],'Port Coquitlam (part of NT test) — XN16':[112.1,112.2],'Port Coquitlam — XN17':[112.1,112.2],'MacAulay — XN18':[112.3,112.4],'Westwood — XN19':[112.9,113.0],'East Port Moody — XN20':[115.5,115.6],'West Port Moody — XN21':[115.5,115.6],'Cassin — XN22':[117.5,117.6],'Walker — XT85':[118.9,119.0],'East Barnet — XN23':[120.5,120.6],'West Barnet — XN24':[120.5,120.6],'Burnaby — XU48':[123.11,123.16],'Second Narrows East — XN25':[124.1,124.2],'Second Narrows West — XN26':[124.1,124.2],'Renfew East — XN27':[125.7,125.8],'Renfew West — XN28':[125.7,125.8],'Williston — XN29':[126.8,126.9],'Dunlevy — XN30':[128.2,128.3]},
+      Westminster: {'Sapperton — XR13':[5.5,5.6]}
+    };
+    if(XOVER_MILEAGE[sub] && master[sub].checklist && master[sub].checklist.Xovers && !master[sub]._xoverFixV2){
+      const mileMap = XOVER_MILEAGE[sub];
+      const withMileage = master[sub].checklist.Xovers.map(label => mileMap[label] ? `${label} (${fmt(mileMap[label][1])}-${fmt(mileMap[label][0])})` : label);
+      master[sub].checklist.Xovers = withMileage;
+      master[sub]._xoverFixV2 = true;
+      await saveMaster(sub);
+
+      if(remaining[sub].checklist && remaining[sub].checklist.Xovers){
+        remaining[sub].checklist.Xovers = remaining[sub].checklist.Xovers.map(label => mileMap[label] ? `${label} (${fmt(mileMap[label][1])}-${fmt(mileMap[label][0])})` : label);
+      }
+      remaining[sub]._xoverFixV2 = true;
+      await saveRemaining(sub);
+    }
+  }
+  let uidoc = await db.doc('ui/state').get().catch(()=>null);
+  if(!uidoc || !uidoc.exists){
+    ui = {order:[...SUBS], collapsed:{}};
+    await db.doc('ui/state').set(ui);
+  } else {
+    ui = deepCopy(uidoc.data());
+    for(const sub of SUBS){ if(!ui.order.includes(sub)) ui.order.push(sub); }
+  }
+  let hdoc = await db.doc('history/log').get().catch(()=>null);
+  if(!hdoc || !hdoc.exists){
+    history = {entries:[]};
+    await db.doc('history/log').set(history);
+  } else {
+    history = deepCopy(hdoc.data());
+    if(!history.entries) history.entries = [];
+  }
+  // One-time (and self-healing) cleanup: collapse any already-stored duplicate
+  // "Recently tested" entries that overlap/touch on the same sub+track+day -- e.g.
+  // left over from before pushHistoryMerged existed, or from two tabs logging at
+  // once. Only writes back if something actually changed.
+  if(dedupeHistoryEntries()) await saveHistory();
+  render();
+}
+// Collapses history entries that are mileage ranges (sub+track+lo+hi, no `kind`)
+// for the same sub+track+day into as few entries as possible, merging any that
+// touch or overlap (same tolerance as pushHistoryMerged/mergeContiguous). Returns
+// true if anything was actually merged, so the caller knows whether to re-save.
+function dedupeHistoryEntries(){
+  const eps = 0.02;
+  const mileage = history.entries.filter(e=>!e.kind && e.track && isFinite(e.lo) && isFinite(e.hi));
+  const other = history.entries.filter(e=>!(!e.kind && e.track && isFinite(e.lo) && isFinite(e.hi)));
+  const groups = {};
+  mileage.forEach(e=>{
+    const day = new Date(e.ts).toDateString();
+    const key = e.sub+'|'+e.track+'|'+day;
+    (groups[key] = groups[key]||[]).push(e);
+  });
+  let changed = false;
+  const merged = [];
+  Object.values(groups).forEach(list=>{
+    list.sort((a,b)=>a.lo-b.lo);
+    let cur = null;
+    list.forEach(e=>{
+      if(cur && e.lo <= cur.hi+eps){
+        cur.lo = Math.min(cur.lo, e.lo);
+        cur.hi = Math.max(cur.hi, e.hi);
+        cur.ts = Math.max(cur.ts, e.ts);
+        changed = true;
+      } else {
+        if(cur) merged.push(cur);
+        cur = {...e};
+      }
+    });
+    if(cur) merged.push(cur);
+  });
+  if(changed){
+    history.entries = [...other, ...merged].sort((a,b)=>b.ts-a.ts).slice(0,200);
+  }
+  return changed;
+}
+
+async function saveUi(){
+  await db.doc('ui/state').set(ui);
+}
+
+function toggleCollapse(sub){
+  ui.collapsed[sub] = !ui.collapsed[sub];
+  saveUi();
+  render();
+}
+function moveToTop(sub){
+  ui.order = [sub, ...ui.order.filter(s=>s!==sub)];
+  saveUi();
+  render();
+}
+function setHistoryOpen(key, isOpen){
+  if(!ui.historyOpen) ui.historyOpen = {};
+  ui.historyOpen[key] = isOpen;
+  saveUi();
+}
+// Remembers whether each subdivision's checklist (Sidings, Xovers, ...) is
+// expanded, so checking a box -- which triggers a full render() -- doesn't
+// collapse the list and force reopening it to check the next box.
+function setChecklistOpen(sub, kind, isOpen){
+  if(!ui.checklistOpen) ui.checklistOpen = {};
+  if(!ui.checklistOpen[sub]) ui.checklistOpen[sub] = {};
+  ui.checklistOpen[sub][kind] = isOpen;
+  saveUi();
+}
+
+async function saveRemaining(sub){
+  await db.doc(`remaining/${sub}`).set(remaining[sub]);
+}
+async function saveMaster(sub){
+  await db.doc(`master/${sub}`).set(master[sub]);
+}
+async function saveHistory(){
+  await db.doc('history/log').set(history);
+}
+async function pushHistory(entry){
+  entry.id = Date.now()+'-'+Math.random().toString(36).slice(2,7);
+  // A caller can pre-set entry.ts (e.g. an XML import carrying the report's own
+  // date) so the entry is grouped under the day it was actually tested, not the
+  // day it happened to be uploaded. Falls back to "now" otherwise, same as before.
+  if(!entry.ts) entry.ts = Date.now();
+  history.entries.unshift(entry);
+  history.entries = history.entries.slice(0,200);
+  await saveHistory();
+}
+// Like pushHistory, but for mileage entries (track/lo/hi -- not checklist entries,
+// which have no lo/hi and are left alone): if today's history already has an entry
+// for the same sub+track that this new range touches or overlaps, extend that
+// entry's lo/hi to cover the union instead of adding a separate entry. This is what
+// stops e.g. two XML imports of the same subdivision on the same day -- one partial,
+// one finishing the track -- from showing up as two separate "Recently tested" rows.
+async function pushHistoryMerged(entry){
+  if(!entry.ts) entry.ts = Date.now();
+  if(entry.track && isFinite(entry.lo) && isFinite(entry.hi)){
+    const eps = 0.02;
+    // Group by the entry's OWN date (today for a live log/checkbox, or whatever
+    // date an XML import carried) rather than always "today" -- so importing a
+    // backdated report twice still merges, and doesn't bleed into today's list.
+    const dayStr = new Date(entry.ts).toDateString();
+    const match = history.entries.find(e=>
+      !e.kind && e.sub===entry.sub && e.track===entry.track &&
+      new Date(e.ts).toDateString()===dayStr &&
+      entry.lo <= e.hi+eps && entry.hi >= e.lo-eps
+    );
+    if(match){
+      match.lo = Math.min(match.lo, entry.lo);
+      match.hi = Math.max(match.hi, entry.hi);
+      match.ts = Math.max(match.ts, entry.ts); // the later of the two, not "now"
+      if(entry.dir) match.dir = entry.dir; // show the most-recently-logged direction
+      history.entries = [match, ...history.entries.filter(e=>e!==match)];
+      history.entries = history.entries.slice(0,200);
+      await saveHistory();
+      return;
+    }
+  }
+  await pushHistory(entry);
+}
+async function undoEntry(id){
+  const idx = history.entries.findIndex(e=>e.id===id);
+  if(idx===-1) return;
+  const e = history.entries[idx];
+  if(!remaining[e.sub]) return;
+  if(e.kind){
+    if(remaining[e.sub].checklistDone && remaining[e.sub].checklistDone[e.kind]){
+      remaining[e.sub].checklistDone[e.kind][e.idx] = false;
+    }
+    await saveRemaining(e.sub);
+    history.entries.splice(idx,1);
+    await saveHistory();
+    toast(`Undone: ${e.sub} ${e.kind} ${e.name}`);
+    render();
+    return;
+  }
+  if(!remaining[e.sub].tracks[e.track]) remaining[e.sub].tracks[e.track]=[];
+  remaining[e.sub].tracks[e.track] = addIntervalBack(remaining[e.sub].tracks[e.track], [e.lo, e.hi]);
+  await saveRemaining(e.sub);
+  history.entries.splice(idx,1);
+  await saveHistory();
+  toast(`Undone: ${e.sub} ${e.track} mp${fmt(e.lo)}-${fmt(e.hi)}`);
+  render();
+}
+
+// The "undo" chip next to the "Recently tested" heading: undoes every logged
+// entry (adding each one's mileage back to remaining, same as the per-row Undo
+// button) and clears the whole history list. Two-tap confirm since it can't be
+// undone itself once the log is cleared.
+let pendingUndoAllHistory = false;
+function confirmUndoAllHistory(){
+  if(!history.entries.length){ toast('Nothing to undo'); return; }
+  if(!pendingUndoAllHistory){
+    pendingUndoAllHistory = true;
+    render();
+    setTimeout(()=>{ if(pendingUndoAllHistory){ pendingUndoAllHistory=false; render(); } }, 4000);
+    return;
+  }
+  pendingUndoAllHistory = false;
+  undoAllHistory();
+}
+async function undoAllHistory(){
+  const subsAffected = new Set();
+  for(const e of history.entries){
+    if(!remaining[e.sub]) continue;
+    if(e.kind){
+      if(remaining[e.sub].checklistDone && remaining[e.sub].checklistDone[e.kind]){
+        remaining[e.sub].checklistDone[e.kind][e.idx] = false;
+      }
+      subsAffected.add(e.sub);
+      continue;
+    }
+    if(!remaining[e.sub].tracks[e.track]) remaining[e.sub].tracks[e.track]=[];
+    remaining[e.sub].tracks[e.track] = addIntervalBack(remaining[e.sub].tracks[e.track], [e.lo, e.hi]);
+    subsAffected.add(e.sub);
+  }
+  for(const sub of subsAffected) await saveRemaining(sub);
+  history.entries = [];
+  await saveHistory();
+  toast('All recently tested history undone');
+  render();
+}
+
+function updateLogTrackOptions(){
+  const subSel = document.getElementById('sel-sub');
+  const trackSel = document.getElementById('sel-track');
+  if(!subSel || !trackSel) return;
+  const cur = trackSel.value;
+  const opts = trackOptionsFor(subSel.value);
+  trackSel.innerHTML = opts.map(t=>`<option ${t===cur?'selected':''}>${t}</option>`).join('');
+}
+async function logTested(){
+  const sub = document.getElementById('sel-sub').value;
+  const track = document.getElementById('sel-track').value;
+  const a = document.getElementById('in-from').value, b = document.getElementById('in-to').value;
+  if(a===''||b===''||isNaN(a)||isNaN(b)){ toast('Enter both mileposts'); return; }
+  const range = normalize(a,b);
+  remaining[sub].tracks[track] = subtractInterval(remaining[sub].tracks[track]||[], range);
+  await saveRemaining(sub);
+  await pushHistoryMerged({sub, track, lo:range[0], hi:range[1], type:'log'});
+  ui.lastSub = sub; ui.lastTrack = track;
+  await saveUi();
+  document.getElementById('in-from').value=''; document.getElementById('in-to').value='';
+  toast(`Logged ${sub} ${track} ${fmt(range[0])}-${fmt(range[1])}`);
+  render();
+}
+
+function copyText(text){
+  navigator.clipboard && navigator.clipboard.writeText(text).then(()=>toast('Copied to clipboard')).catch(()=>fallbackCopy(text));
+  if(!navigator.clipboard) fallbackCopy(text);
+}
+function fallbackCopy(text){
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try{ document.execCommand('copy'); toast('Copied to clipboard'); }catch(e){ toast('Copy failed - long-press to select text'); }
+  document.body.removeChild(ta);
+}
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function buildCopyHtml(rows, titleRow=0, mergeRow=-1){
+  // LibreOffice's HTML clipboard importer doesn't reliably parse the "border"
+  // shorthand (or per-side "border-top:" shorthand) -- it wants the longhand
+  // border-style/border-width/border-color properties spelled out, so every
+  // side is listed separately here rather than combined into one value.
+  const border = 'border-style:solid;border-width:1.5pt;border-color:#000000;';
+  const tdAttrs = `border="2" bordercolor="#000000"`;
+  // titleRow/mergeRow can each be a single row index or an array of them --
+  // the multi-subdivision export (copyAllRemainingToday) needs one bold/underline
+  // title per subdivision and one merged row per summary line, not just one of each.
+  const titleRows = new Set(Array.isArray(titleRow) ? titleRow : [titleRow]);
+  const mergeRows = new Set(Array.isArray(mergeRow) ? mergeRow : [mergeRow]);
+  let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>table{border-collapse:collapse;} table,td{${border}} td{font-family:Calibri,Arial,sans-serif;font-size:11pt;white-space:nowrap;vertical-align:bottom;text-decoration:none;font-weight:400;}</style></head><body><table border="2" bordercolor="#000000" cellspacing="0" cellpadding="3" rules="all" frame="box" style="border-collapse:collapse;${border}">`;
+  rows.forEach((row,i)=>{
+    html += '<tr>';
+    if(mergeRows.has(i)){
+      let content = row[0]==='' ? '&nbsp;' : escapeHtml(row[0]);
+      if(titleRows.has(i)) content = `<b><u>${content}</u></b>`;
+      html += `<td colspan="${row.length}" ${tdAttrs} style="${border}padding:1px 6px;text-decoration:none;">${content}</td>`;
+    } else {
+      row.forEach((cell,ci)=>{
+        const style = `${border}padding:1px 6px;text-decoration:none;`;
+        let content = cell===''?'&nbsp;':escapeHtml(cell);
+        if(titleRows.has(i) && ci===0) content = `<b><u>${content}</u></b>`;
+        html += `<td ${tdAttrs} style="${style}">${content}</td>`;
+      });
+    }
+    html += '</tr>';
+  });
+  html += '</table></body></html>';
+  return html;
+}
+function copyRich(text, html){
+  if(navigator.clipboard && window.ClipboardItem){
+    try{
+      const item = new ClipboardItem({
+        'text/plain': new Blob([text], {type:'text/plain'}),
+        'text/html': new Blob([html], {type:'text/html'})
+      });
+      navigator.clipboard.write([item]).then(()=>toast('Copied to clipboard')).catch(()=>copyText(text));
+      return;
+    }catch(e){}
+  }
+  copyText(text);
+}
+// Builds the "remaining miles" report for one subdivision as {totalLine, suffixLine,
+// bodyRows}: totalLine is the bare grand-total number, suffixLine is "plus sidings",
+// "plus xovers", "plus sidings and xovers" or "" (kept as its own row so it always
+// gets its own merged cell rather than relying on the number's cell to wrap), and
+// bodyRows starts with the bold subdivision-name row followed by every track and
+// checklist line. Anything skipped this cycle (Sidings/Xovers/a skippable track
+// like Mission's "Main (occasional)") is left out entirely, not just marked
+// "Not testing this cycle". Shared by the single-subdivision "Copy Remaining
+// Miles" button and the multi-subdivision "Copy Remaining Miles (today's subs)"
+// button.
+function buildRemainingSegmentData(sub){
+  const r = remaining[sub]; if(!r) return null;
+  const trackKind = {Siding:'Sidings'};
+  const isExcluded = kind => !!(r.excluded && r.excluded[kind]);
+  // Grand total for the top of the sheet: Main/North/South (and any other real
+  // track) only -- Siding, Xover and Yard never count here, matching the "mi
+  // left" total shown on screen.
+  const grandTotal = Object.keys(r.tracks||{}).reduce((s,t)=>{
+    if(t==='Siding' || t==='Xover' || t==='Yard') return s;
+    if(isExcluded(trackKind[t]||t)) return s;
+    return s + totalMiles(r.tracks[t]);
+  }, 0);
+  const hasSidings = ((r.checklist&&r.checklist.Sidings)||[]).length > 0 && !isExcluded('Sidings');
+  const hasXovers = ((r.checklist&&r.checklist.Xovers)||[]).length > 0 && !isExcluded('Xovers');
+  let suffixLine = '';
+  if(hasSidings && hasXovers) suffixLine = 'plus sidings and xovers';
+  else if(hasSidings) suffixLine = 'plus sidings';
+  else if(hasXovers) suffixLine = 'plus xovers';
+  const totalLine = fmt(grandTotal)+'';
+  let bodyRows = [[sub.toUpperCase(), '']];
+  // A named Sidings checklist below already lists these same segments as
+  // "Name" checkboxes -- skip the plain mp-range Siding track list here so it
+  // isn't shown twice.
+  const hasNamedSidingList = !!(master[sub] && master[sub].checklist && (master[sub].checklist.Sidings||[]).length);
+  for(const t of Object.keys(r.tracks||{}).sort((a,b)=>trackRank(a)-trackRank(b))){
+    if(isExcluded(trackKind[t]||t)) continue; // skipped this cycle -- leave it off entirely
+    if(t==='Siding' && hasNamedSidingList) continue; // shown in the Sidings checklist line instead
+    const ivs = r.tracks[t];
+    const total = fmt(totalMiles(ivs));
+    if(!ivs.length){
+      bodyRows.push([`${t} [${total}]`, 'Complete']);
+    } else {
+      const sorted = [...ivs].sort((a,b)=>b[1]-a[1]);
+      sorted.forEach(([lo,hi], idx)=>{
+        let label = `mp${fmt(hi)}-${fmt(lo)}(${fmt(hi-lo)})`;
+        if(t==='Siding'){
+          const names = sidingNamesForRange(sub, lo, hi);
+          if(names.length) label += ' - ' + names.join(', ');
+        }
+        bodyRows.push([idx===0 ? `${t} [${total}]` : '', label]);
+      });
+    }
+    bodyRows.push(['','']);
+  }
+  for(const kind of Object.keys(r.checklist||{})){
+    const items = r.checklist[kind]||[];
+    if(!items.length) continue;
+    if(isExcluded(kind)) continue; // skipped this cycle -- leave it off entirely
+    let left;
+    if(kind==='Sidings'){
+      // Name only, no mileage -- derived fresh from the actual remaining mileage
+      // rather than trusting stale done-flags.
+      left = items.filter(label=>{
+        const rg = parseSidingRange(label);
+        return rg ? !sidingIsDone(sub, rg[0], rg[1]) : true;
+      }).map(label=> sidingBaseName(label));
+    } else if(kind==='Xovers'){
+      // Names only (no mileage/code), and an East/West pair collapses to one name.
+      const done = r.checklistDone[kind]||[];
+      const seen = new Set();
+      left = [];
+      items.forEach((label,i)=>{
+        if(done[i]) return;
+        const base = xoverBaseName(label);
+        if(!seen.has(base)){ seen.add(base); left.push(base); }
+      });
+    } else {
+      const done = r.checklistDone[kind]||[];
+      left = items.filter((_,i)=>!done[i]);
+    }
+    bodyRows.push([kind, left.length ? left.join(', ') : 'Complete']);
+  }
+  while(bodyRows.length>1 && bodyRows[bodyRows.length-1].every(c=>c==='')) bodyRows.pop();
+  return { totalLine, suffixLine, bodyRows };
+}
+function copySegments(sub){
+  const data = buildRemainingSegmentData(sub);
+  if(!data) return;
+  const line = data.suffixLine ? `${data.totalLine} ${data.suffixLine}` : data.totalLine;
+  const rows = [[line, ''], ['','']].concat(data.bodyRows);
+  const titleRow = 2;
+  const text = rows.map(row=>row.join('\t')).join('\n');
+  const html = buildCopyHtml(rows, titleRow, 0);
+  copyRich(text, html);
+}
+// Master "Copy Remaining Miles" button (near Recently tested): on a day when
+// several subdivisions get tested, this copies all of them in one paste --
+// one summary line per subdivision at the top ("Thompson: 51.78 plus sidings"),
+// then each subdivision's full remaining-miles report below, in order.
+function copyAllRemainingToday(){
+  const todayStr = new Date().toDateString();
+  const subsToday = ui.order.filter(sub=> remaining[sub] && history.entries.some(e=>e.sub===sub && new Date(e.ts).toDateString()===todayStr));
+  if(!subsToday.length){ toast('Nothing tested today'); return; }
+  const datas = subsToday.map(sub=>({sub, data: buildRemainingSegmentData(sub)})).filter(d=>d.data);
+  if(!datas.length){ toast('Nothing tested today'); return; }
+  let rows = [];
+  const mergeRows = [];
+  datas.forEach(({sub,data})=>{
+    mergeRows.push(rows.length);
+    const line = data.suffixLine ? `${sub}: ${data.totalLine} ${data.suffixLine}` : `${sub}: ${data.totalLine}`;
+    rows.push([line, '']);
+  });
+  rows.push(['','']);
+  const titleRows = [];
+  datas.forEach(({data}, i)=>{
+    titleRows.push(rows.length);
+    rows = rows.concat(data.bodyRows);
+    if(i < datas.length-1) rows.push(['','']);
+  });
+  const text = rows.map(row=>row.join('\t')).join('\n');
+  const html = buildCopyHtml(rows, titleRows, mergeRows);
+  copyRich(text, html);
+}
+// Builds the "miles tested today" bodyRows for one subdivision (starting with the
+// bold subdivision-name row), or null if nothing was logged today for it. Contiguous
+// same-track segments (e.g. two Main entries logged back to back) are merged into
+// one combined range; Siding/Xover entries show matching names instead. Shared by
+// the single-subdivision "Copy Miles Tested Today" button and the master button.
+function buildTodaySegmentRows(sub){
+  const todayStr = new Date().toDateString();
+  const entries = history.entries.filter(e=>e.sub===sub && new Date(e.ts).toDateString()===todayStr);
+  if(!entries.length) return null;
+  const namedKind = {Siding:'Sidings', Yard:'Yard'};
+  const kindToTrack = {Sidings:'Siding', Xovers:'Xover', Yard:'Yard'};
+  const byTrack = {};
+  const byKind = {};
+  entries.forEach(e=>{
+    if(e.track) (byTrack[e.track] = byTrack[e.track]||[]).push([e.lo, e.hi]);
+    else if(e.kind) (byKind[e.kind] = byKind[e.kind]||new Set()).add(e.name);
+  });
+  let rows = [[sub.toUpperCase(), '']];
+  Object.keys(byTrack).sort((a,b)=>trackRank(a)-trackRank(b)).forEach(t=>{
+    const merged = mergeContiguous(byTrack[t]);
+    const kind = namedKind[t];
+    if(kind && master[sub] && master[sub].checklist && master[sub].checklist[kind]){
+      const names = [];
+      merged.forEach(([lo,hi])=>{
+        itemNamesForRange(sub, kind, lo, hi).forEach(n=>{ if(!names.includes(n)) names.push(n); });
+      });
+      rows.push([t, names.length ? names.join(', ') : merged.map(([lo,hi])=>`Mp${fmt(hi)}-${fmt(lo)}`).join(', ')]);
+    } else {
+      const sorted = [...merged].sort((a,b)=>b[1]-a[1]);
+      sorted.forEach(([lo,hi], idx)=>{
+        rows.push([idx===0 ? t : '', `Mp${fmt(hi)}-${fmt(lo)}`]);
+      });
+    }
+  });
+  // Checklist-based completions recorded today (e.g. Xovers checked off), which
+  // have no mileage of their own -- just the item names, deduped.
+  Object.keys(byKind).sort((a,b)=>trackRank(kindToTrack[a]||a)-trackRank(kindToTrack[b]||b)).forEach(kind=>{
+    rows.push([kind, [...byKind[kind]].join(', ')]);
+  });
+  return rows;
+}
+function copyTodaySegments(sub){
+  const rows = buildTodaySegmentRows(sub);
+  if(!rows){ toast(`Nothing logged today for ${sub}`); return; }
+  const text = rows.map(row=>row.join('\t')).join('\n');
+  const html = buildCopyHtml(rows, 0);
+  copyRich(text, html);
+}
+// Master "Copy Miles Tested Today" button (next to "Copy Remaining Miles" near
+// Recently tested): copies every subdivision tested today, one after another --
+// bold subdivision name, then its tracks/checklist lines, blank row, next sub.
+function copyAllTodaySegments(){
+  const perSub = ui.order.map(sub=>({sub, rows: buildTodaySegmentRows(sub)})).filter(d=>d.rows);
+  if(!perSub.length){ toast('Nothing logged today'); return; }
+  let rows = [];
+  const titleRows = [];
+  perSub.forEach(({rows: subRows}, i)=>{
+    titleRows.push(rows.length);
+    rows = rows.concat(subRows);
+    if(i < perSub.length-1) rows.push(['','']);
+  });
+  const text = rows.map(row=>row.join('\t')).join('\n');
+  const html = buildCopyHtml(rows, titleRows);
+  copyRich(text, html);
+}
+async function resetAll(){
+  for(const sub of ui.order){
+    remaining[sub] = deepCopy(master[sub]);
+    remaining[sub].checklistDone = {};
+    Object.keys(remaining[sub].checklist||{}).forEach(k=> remaining[sub].checklistDone[k] = (remaining[sub].checklist[k]||[]).map(()=>false));
+    await saveRemaining(sub);
+  }
+  toast('All subdivisions reset');
+  render();
+}
+
+async function resetCycle(sub){
+  remaining[sub] = deepCopy(master[sub]);
+  remaining[sub].checklistDone = {};
+  Object.keys(remaining[sub].checklist||{}).forEach(k=> remaining[sub].checklistDone[k] = (remaining[sub].checklist[k]||[]).map(()=>false));
+  await saveRemaining(sub);
+  toast(`${sub} cycle reset`);
+  render();
+}
+
+async function toggleCheck(sub, kind, idx){
+  if(!remaining[sub].checklistDone[kind]) remaining[sub].checklistDone[kind]=[];
+  const wasDone = !!remaining[sub].checklistDone[kind][idx];
+  remaining[sub].checklistDone[kind][idx] = !wasDone;
+  await saveRemaining(sub);
+  // Record a history entry only when marking something DONE (not when un-checking),
+  // same as the Sidings checklist does via markSegmentTested -- otherwise "Copy
+  // today's segments" has no record that this item was ever checked off today.
+  if(!wasDone){
+    const label = (master[sub].checklist[kind]||[])[idx];
+    if(label){
+      const name = kind==='Xovers' ? xoverBaseName(label) : stripTrailingRange(label);
+      await pushHistory({sub, kind, idx, name, type:'checklist'});
+    }
+  }
+  render();
+}
+
+// Mark a checklist kind (Sidings, Xovers, ...) as not being tested this cycle.
+// Purely a display/total exclusion -- does not touch tested/remaining mileage
+// or checklistDone, and clears itself on the next "Reset cycle" / "Reset all".
+async function toggleExcluded(sub, kind){
+  if(!remaining[sub].excluded) remaining[sub].excluded = {};
+  remaining[sub].excluded[kind] = !remaining[sub].excluded[kind];
+  await saveRemaining(sub);
+  toast(remaining[sub].excluded[kind] ? `${kind} skipped this cycle` : `${kind} back in this cycle`);
+  render();
+}
+
+// Whether a mileage TRACK (not just a checklist kind like Sidings/Xovers) is
+// allowed to show up in the "Not testing this cycle" list at all -- e.g. a
+// segment that's only occasionally tested, like Mission's mp1.52-10.1. This is
+// a structural flag on the track itself (set once in master data), separate
+// from whether it's actually skipped THIS cycle (that's `excluded`, above).
+async function toggleTrackSkippable(sub, track){
+  if(!master[sub].skippableTracks) master[sub].skippableTracks = [];
+  const i = master[sub].skippableTracks.indexOf(track);
+  if(i===-1) master[sub].skippableTracks.push(track); else master[sub].skippableTracks.splice(i,1);
+  await saveMaster(sub);
+  toast(master[sub].skippableTracks.includes(track) ? `${track} can be skipped per cycle` : `${track} no longer skippable`);
+  render();
+}
+
+function sidingIsDone(sub, lo, hi){
+  const ivs = (remaining[sub] && remaining[sub].tracks && remaining[sub].tracks.Siding) || [];
+  return !ivs.some(([a,b])=> b>lo && a<hi);
+}
+async function toggleSidingDone(sub, idx, checked){
+  const label = (master[sub].checklist.Sidings||[])[idx];
+  const r = parseSidingRange(label);
+  if(!r) return;
+  if(checked){
+    await markSegmentTested(sub, 'Siding', r[0], r[1]);
+  } else {
+    if(!remaining[sub].tracks.Siding) remaining[sub].tracks.Siding = [];
+    remaining[sub].tracks.Siding = addIntervalBack(remaining[sub].tracks.Siding, r);
+    await saveRemaining(sub);
+    toast(`Marked ${sidingBaseName(label)} not tested`);
+    render();
+  }
+}
+
+async function markSegmentTested(sub, track, lo, hi){
+  remaining[sub].tracks[track] = subtractInterval(remaining[sub].tracks[track]||[], [lo,hi]);
+  await saveRemaining(sub);
+  await pushHistoryMerged({sub, track, lo, hi, type:'segment'});
+  toast(`Marked ${sub} ${track} mp${fmt(lo)}-${fmt(hi)} tested`);
+  render();
+}
+
+function toggleMasterEdit(sub){
+  if(!ui.masterEditOpen) ui.masterEditOpen = {};
+  ui.masterEditOpen[sub] = !ui.masterEditOpen[sub];
+  saveUi();
+  render();
+}
+function toggleMasterSection(){
+  ui.masterSectionOpen = !ui.masterSectionOpen;
+  saveUi();
+  render();
+}
+function toggleLogSection(){
+  ui.logSectionOpen = !ui.logSectionOpen;
+  saveUi();
+  render();
+}
+
+// diff oldRange -> newRange and apply the change to a track's remaining intervals:
+// pieces of oldRange no longer covered by newRange are removed from remaining,
+// pieces of newRange not covered by oldRange are added back as untested.
+function applyRangeDiffToRemaining(sub, track, oldRange, newRange){
+  let rem = remaining[sub].tracks[track] || [];
+  if(oldRange){
+    subtractInterval([oldRange], newRange).forEach(p=>{ rem = subtractInterval(rem, p); });
+  }
+  subtractInterval([newRange], oldRange || [0,0]).forEach(p=>{ rem = addIntervalBack(rem, p); });
+  remaining[sub].tracks[track] = rem;
+}
+
+async function editMasterSegment(sub, track, idx, lo, hi){
+  if(isNaN(lo)||isNaN(hi)){ toast('Enter both mileposts'); return; }
+  const range = normalize(lo, hi);
+  if(!master[sub].tracks[track]) master[sub].tracks[track]=[];
+  const oldRange = master[sub].tracks[track][idx] || null;
+  master[sub].tracks[track][idx] = range;
+  await saveMaster(sub);
+  if(!remaining[sub].tracks[track]) remaining[sub].tracks[track]=[];
+  applyRangeDiffToRemaining(sub, track, oldRange, range);
+  await saveRemaining(sub);
+  toast(`Updated ${sub} ${track} segment`);
+  render();
+}
+async function addMasterSegment(sub, track){
+  if(!master[sub].tracks[track]) master[sub].tracks[track]=[];
+  master[sub].tracks[track].push([0,0]);
+  await saveMaster(sub);
+  render();
+}
+async function removeMasterSegment(sub, track, idx){
+  const range = master[sub].tracks[track][idx];
+  master[sub].tracks[track].splice(idx,1);
+  await saveMaster(sub);
+  if(range && remaining[sub].tracks[track]){
+    remaining[sub].tracks[track] = subtractInterval(remaining[sub].tracks[track], range);
+    await saveRemaining(sub);
+  }
+  toast('Removed segment');
+  render();
+}
+async function addMasterTrack(sub){
+  const inp = document.getElementById(`me-newtrack-${sub}`);
+  const name = (inp?inp.value:'').trim();
+  if(!name){ toast('Enter a track name'); return; }
+  if(!master[sub].tracks) master[sub].tracks={};
+  if(master[sub].tracks[name]){ toast('That track already exists'); return; }
+  master[sub].tracks[name] = [];
+  await saveMaster(sub);
+  if(!remaining[sub].tracks) remaining[sub].tracks={};
+  remaining[sub].tracks[name] = [];
+  await saveRemaining(sub);
+  toast(`Added track ${name}`);
+  render();
+}
+async function removeMasterTrack(sub, track){
+  delete master[sub].tracks[track];
+  await saveMaster(sub);
+  delete remaining[sub].tracks[track];
+  await saveRemaining(sub);
+  toast(`Removed ${track}`);
+  render();
+}
+async function editMasterSiding(sub, idx, name, lo, hi){
+  if(!name || !name.trim() || isNaN(lo) || isNaN(hi)){ toast('Enter a name and both mileposts'); return; }
+  const range = normalize(lo, hi);
+  if(!master[sub].checklist.Sidings) master[sub].checklist.Sidings=[];
+  if(!master[sub].tracks.Siding) master[sub].tracks.Siding=[];
+  const oldRange = master[sub].tracks.Siding[idx] || null;
+  const label = `${name.trim()} (${fmt(range[1])}-${fmt(range[0])})`;
+  master[sub].checklist.Sidings[idx] = label;
+  master[sub].tracks.Siding[idx] = range;
+  await saveMaster(sub);
+  if(!remaining[sub].tracks.Siding) remaining[sub].tracks.Siding=[];
+  applyRangeDiffToRemaining(sub, 'Siding', oldRange, range);
+  if(!remaining[sub].checklist.Sidings) remaining[sub].checklist.Sidings=[];
+  remaining[sub].checklist.Sidings[idx] = label;
+  await saveRemaining(sub);
+  toast(`Updated ${label}`);
+  render();
+}
+async function addMasterSiding(sub){
+  if(!master[sub].checklist) master[sub].checklist={};
+  if(!master[sub].checklist.Sidings) master[sub].checklist.Sidings=[];
+  if(!master[sub].tracks.Siding) master[sub].tracks.Siding=[];
+  master[sub].checklist.Sidings.push('New siding (0-0)');
+  master[sub].tracks.Siding.push([0,0]);
+  await saveMaster(sub);
+  if(!remaining[sub].checklist) remaining[sub].checklist={};
+  if(!remaining[sub].checklist.Sidings) remaining[sub].checklist.Sidings=[];
+  if(!remaining[sub].checklistDone) remaining[sub].checklistDone={};
+  if(!remaining[sub].checklistDone.Sidings) remaining[sub].checklistDone.Sidings=[];
+  remaining[sub].checklist.Sidings.push('New siding (0-0)');
+  remaining[sub].checklistDone.Sidings.push(false);
+  await saveRemaining(sub);
+  render();
+}
+async function removeMasterSiding(sub, idx){
+  const range = master[sub].tracks.Siding ? master[sub].tracks.Siding[idx] : null;
+  master[sub].checklist.Sidings.splice(idx,1);
+  if(master[sub].tracks.Siding) master[sub].tracks.Siding.splice(idx,1);
+  await saveMaster(sub);
+  if(remaining[sub].checklist && remaining[sub].checklist.Sidings) remaining[sub].checklist.Sidings.splice(idx,1);
+  if(remaining[sub].checklistDone && remaining[sub].checklistDone.Sidings) remaining[sub].checklistDone.Sidings.splice(idx,1);
+  if(range && remaining[sub].tracks.Siding) remaining[sub].tracks.Siding = subtractInterval(remaining[sub].tracks.Siding, range);
+  await saveRemaining(sub);
+  toast('Removed siding');
+  render();
+}
+async function addChecklistItem(sub, kind){
+  const inp = document.getElementById(`me-newitem-${sub}-${kind}`);
+  const name = (inp?inp.value:'').trim();
+  if(!name){ toast('Enter a name'); return; }
+  if(!master[sub].checklist[kind]) master[sub].checklist[kind]=[];
+  master[sub].checklist[kind].push(name);
+  await saveMaster(sub);
+  if(!remaining[sub].checklist[kind]) remaining[sub].checklist[kind]=[];
+  if(!remaining[sub].checklistDone[kind]) remaining[sub].checklistDone[kind]=[];
+  remaining[sub].checklist[kind].push(name);
+  remaining[sub].checklistDone[kind].push(false);
+  await saveRemaining(sub);
+  render();
+}
+async function removeChecklistItem(sub, kind, idx){
+  master[sub].checklist[kind].splice(idx,1);
+  await saveMaster(sub);
+  if(remaining[sub].checklist[kind]) remaining[sub].checklist[kind].splice(idx,1);
+  if(remaining[sub].checklistDone[kind]) remaining[sub].checklistDone[kind].splice(idx,1);
+  await saveRemaining(sub);
+  render();
+}
+// Edit a plain (non-Sidings) checklist item's name and, optionally, its
+// reference mileage -- e.g. an Xover's location. This is display-only mileage:
+// it's stored as "(lo-hi)" in the label text for reference, same convention as
+// Sidings, but it is NOT tracked as testable mileage and never affects any
+// "miles remaining" total.
+async function editChecklistItem(sub, kind, idx, name, lo, hi){
+  const nm = (name||'').trim();
+  if(!nm){ toast('Enter a name'); return; }
+  let label = nm;
+  if(!isNaN(lo) && !isNaN(hi)){
+    const r = normalize(lo, hi);
+    label = `${nm} (${fmt(r[1])}-${fmt(r[0])})`;
+  }
+  master[sub].checklist[kind][idx] = label;
+  await saveMaster(sub);
+  if(remaining[sub].checklist && remaining[sub].checklist[kind]) remaining[sub].checklist[kind][idx] = label;
+  await saveRemaining(sub);
+  toast(`Updated ${nm}`);
+  render();
+}
+async function addMasterSubdivision(){
+  const inp = document.getElementById('me-newsub');
+  const name = (inp?inp.value:'').trim();
+  if(!name){ toast('Enter a name'); return; }
+  if(master[name]){ toast('That subdivision already exists'); return; }
+  master[name] = {tracks:{}, checklist:{}};
+  remaining[name] = {tracks:{}, checklist:{}, checklistDone:{}};
+  await saveMaster(name);
+  await saveRemaining(name);
+  if(!SUBS.includes(name)) SUBS.push(name);
+  ui.order.push(name);
+  if(!ui.masterEditOpen) ui.masterEditOpen={};
+  ui.masterEditOpen[name] = true;
+  await saveUi();
+  toast(`Added ${name}`);
+  render();
+}
+let pendingDeleteSub = null;
+function confirmDeleteSubdivision(sub){
+  if(pendingDeleteSub === sub){
+    pendingDeleteSub = null;
+    deleteSubdivision(sub);
+  } else {
+    pendingDeleteSub = sub;
+    render();
+  }
+}
+async function deleteSubdivision(sub){
+  await db.doc(`master/${sub}`).set({tracks:{}, checklist:{}, _deleted:true});
+  await db.doc(`remaining/${sub}`).set({tracks:{}, checklist:{}, checklistDone:{}, _deleted:true});
+  delete master[sub];
+  delete remaining[sub];
+  const si = SUBS.indexOf(sub); if(si>-1) SUBS.splice(si,1);
+  ui.order = ui.order.filter(s=>s!==sub);
+  if(ui.collapsed) delete ui.collapsed[sub];
+  if(ui.masterEditOpen) delete ui.masterEditOpen[sub];
+  await saveUi();
+  toast(`Deleted ${sub}`);
+  render();
+}
+function masterEditHtml(){
+  const sectionOpen = !!ui.masterSectionOpen;
+  let h = `<div class="card">
+    <div class="subdiv-head" onclick="toggleMasterSection()" style="cursor:pointer">
+      <span class="subdiv-name">${sectionOpen?'▾':'▸'} Edit master data <span class="chip">setup · rarely needed</span></span>
+    </div>`;
+  if(!sectionOpen){ return h + `</div>`; }
+  for(const sub of ui.order){
+    if(!master[sub]) continue;
+    const isOpen = !!(ui.masterEditOpen && ui.masterEditOpen[sub]);
+    const delLabel = pendingDeleteSub===sub ? 'Tap again to confirm' : 'Delete';
+    h += `<div class="card" style="margin:12px 0 0">
+      <div class="subdiv-head">
+        <span class="subdiv-name" onclick="toggleMasterEdit('${sub}')" style="cursor:pointer">${isOpen?'▾':'▸'} ${sub}</span>
+        <button class="danger" style="padding:4px 8px;font-size:11px" onclick="confirmDeleteSubdivision('${sub}')">${delLabel}</button>
+      </div>`;
+    if(isOpen){
+      const tracks = Object.keys(master[sub].tracks||{}).filter(t=>t!=='Siding').sort((a,b)=>trackRank(a)-trackRank(b));
+      tracks.forEach(t=>{
+        const isSkippable = ((master[sub].skippableTracks)||[]).includes(t);
+        h += `<div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="section-title" style="margin:0;font-size:13px">${t}</span>
+          <span style="display:flex;gap:6px">
+            <button class="secondary" style="padding:2px 8px;font-size:11px" onclick="toggleTrackSkippable('${sub}','${t}')">${isSkippable?'Skippable ✓ — tap to undo':'Make skippable per cycle'}</button>
+            <button class="danger" style="padding:2px 8px;font-size:11px" onclick="removeMasterTrack('${sub}','${t}')">Remove track</button>
+          </span>
+        </div>`;
+        (master[sub].tracks[t]||[]).forEach((seg,idx)=>{
+          h += `<div class="row" style="align-items:flex-end">
+            <div><label>From</label><input type="number" step="0.01" id="me-${sub}-${t}-${idx}-lo" value="${seg[0]}"></div>
+            <div><label>To</label><input type="number" step="0.01" id="me-${sub}-${t}-${idx}-hi" value="${seg[1]}"></div>
+            <div style="flex:0 0 auto;display:flex;gap:4px;padding-bottom:8px">
+              <button class="secondary" style="padding:8px" onclick="editMasterSegment('${sub}','${t}',${idx},parseFloat(document.getElementById('me-${sub}-${t}-${idx}-lo').value),parseFloat(document.getElementById('me-${sub}-${t}-${idx}-hi').value))">Save</button>
+              <button class="danger" style="padding:8px" onclick="removeMasterSegment('${sub}','${t}',${idx})">✕</button>
+            </div>
+          </div>`;
+        });
+        h += `<button class="secondary" style="margin-bottom:4px" onclick="addMasterSegment('${sub}','${t}')">+ Add ${t} segment</button>`;
+      });
+      h += `<div class="row" style="margin-top:10px"><div><input id="me-newtrack-${sub}" placeholder="New track name"></div><div style="flex:0 0 auto"><button class="secondary" onclick="addMasterTrack('${sub}')">+ Add track</button></div></div>`;
+
+      h += `<div class="section-title" style="margin:14px 0 4px;font-size:13px">Sidings</div>`;
+      (master[sub].checklist.Sidings||[]).forEach((label,idx)=>{
+        const rg = (master[sub].tracks.Siding && master[sub].tracks.Siding[idx]) || parseSidingRange(label) || [0,0];
+        const nm = sidingBaseName(label);
+        h += `<div class="row" style="align-items:flex-end">
+          <div style="flex:1.4"><label>Name</label><input id="me-sd-${sub}-${idx}-nm" value="${escapeHtml(nm)}"></div>
+          <div><label>From</label><input type="number" step="0.01" id="me-sd-${sub}-${idx}-lo" value="${rg[0]}"></div>
+          <div><label>To</label><input type="number" step="0.01" id="me-sd-${sub}-${idx}-hi" value="${rg[1]}"></div>
+          <div style="flex:0 0 auto;display:flex;gap:4px;padding-bottom:8px">
+            <button class="secondary" style="padding:8px" onclick="editMasterSiding('${sub}',${idx},document.getElementById('me-sd-${sub}-${idx}-nm').value,parseFloat(document.getElementById('me-sd-${sub}-${idx}-lo').value),parseFloat(document.getElementById('me-sd-${sub}-${idx}-hi').value))">Save</button>
+            <button class="danger" style="padding:8px" onclick="removeMasterSiding('${sub}',${idx})">✕</button>
+          </div>
+        </div>`;
+      });
+      h += `<button class="secondary" style="margin-bottom:8px" onclick="addMasterSiding('${sub}')">+ Add siding</button>`;
+
+      Object.keys(master[sub].checklist||{}).filter(k=>k!=='Sidings').forEach(kind=>{
+        h += `<div class="section-title" style="margin:14px 0 4px;font-size:13px">${kind} <span class="chip">reference mileage · not counted in totals</span></div>`;
+        (master[sub].checklist[kind]||[]).forEach((label,idx)=>{
+          const rg = parseTrailingRange(label);
+          const nm = stripTrailingRange(label);
+          h += `<div class="row" style="align-items:flex-end">
+            <div style="flex:1.6"><label>Name</label><input id="me-ci-${sub}-${kind}-${idx}-nm" value="${escapeHtml(nm)}"></div>
+            <div><label>From</label><input type="number" step="0.01" id="me-ci-${sub}-${kind}-${idx}-lo" value="${rg?rg[0]:''}"></div>
+            <div><label>To</label><input type="number" step="0.01" id="me-ci-${sub}-${kind}-${idx}-hi" value="${rg?rg[1]:''}"></div>
+            <div style="flex:0 0 auto;display:flex;gap:4px;padding-bottom:8px">
+              <button class="secondary" style="padding:8px" onclick="editChecklistItem('${sub}','${kind}',${idx},document.getElementById('me-ci-${sub}-${kind}-${idx}-nm').value,parseFloat(document.getElementById('me-ci-${sub}-${kind}-${idx}-lo').value),parseFloat(document.getElementById('me-ci-${sub}-${kind}-${idx}-hi').value))">Save</button>
+              <button class="danger" style="padding:8px" onclick="removeChecklistItem('${sub}','${kind}',${idx})">✕</button>
+            </div>
+          </div>`;
+        });
+        h += `<div class="row" style="margin-top:4px"><div><input id="me-newitem-${sub}-${kind}" placeholder="New ${kind.replace(/s$/,'')} name"></div><div style="flex:0 0 auto"><button class="secondary" onclick="addChecklistItem('${sub}','${kind}')">+ Add</button></div></div>`;
+      });
+    }
+    h += `</div>`;
+  }
+  h += `<div class="card" style="margin:12px 0 0">
+    <label>Add new subdivision</label>
+    <input id="me-newsub" placeholder="e.g. Westminster Extension">
+    <button onclick="addMasterSubdivision()">+ Add subdivision</button>
+  </div>`;
+  h += `</div>`;
+  return h;
+}
+
+let imp = {files:[], rows:[], total:null, status:'', busy:false};
+const IMP_PROMPT = `These images are pages of a rail "Car Movement Report". Find every table row that has a number in the MILES > TEST column specifically (NOT the RUN column, and not a blank). For each such row, report the subdivision, track info, direction, milepost and test miles exactly as printed - do not calculate or infer anything. Reply with ONLY JSON, no other text: {"reportTotalTest": number or null, "rows":[{"subdivision":string,"trk":string,"trackName":string,"remark":string,"dir":"U"|"D"|"","milepost":number,"testMiles":number}]}. "subdivision" is the SUBDIVISION field of the header block the row's table sits under (drop any leading comma/punctuation). "trackName" is the TRACK NAME column text for that row. "remark" is the REMARKS/TRAFFIC COMMENT column text for that row. "dir" is the single-letter D column (U or D), blank if not printed. "reportTotalTest" is the number in the TEST column of the "Report Totals" line, or null if that line isn't visible. If you can't read a row's milepost or testMiles clearly, omit that row rather than guessing.`;
+function impMapTrack(r){
+  const t = (String(r.trackName||'')+' '+String(r.remark||'')).toUpperCase();
+  if(t.includes('SIDING')) return 'Siding';
+  if(t.includes('CROSSOVER') || t.includes('COSSOVER') || /\bXOVER\b/.test(t)) return 'Xover';
+  if(t.includes('YARD')) return 'Yard';
+  if(t.includes('SOUTH')) return 'South';
+  if(t.includes('NORTH')) return t.includes('DIVERSION') ? 'North DT' : 'North';
+  if(t.includes('MAIN') || /\bML\b/.test(t)) return 'Main';
+  return '';
+}
+function impPick(files){
+  imp.files = Array.from(files||[]);
+  imp.rows=[]; imp.total=null;
+  imp.status = imp.files.length ? 'Selected: '+imp.files.map(f=>f.name).join(', ') : '';
+  render();
+}
+function loadPdfJs(){
+  return new Promise((res,rej)=>{
+    if(window.pdfjsLib) return res(window.pdfjsLib);
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload=()=>{ window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; res(window.pdfjsLib); };
+    s.onerror=()=>rej(new Error('Could not load the PDF reader'));
+    document.head.appendChild(s);
+  });
+}
+async function filesToImages(files, max){
+  const out=[];
+  for(const f of files){
+    if(out.length>=max) break;
+    if(f.type.startsWith('image/')){ out.push(f); continue; }
+    const lib = await loadPdfJs();
+    const pdf = await lib.getDocument({data: await f.arrayBuffer()}).promise;
+    for(let p=1;p<=pdf.numPages && out.length<max;p++){
+      const page = await pdf.getPage(p);
+      const vp = page.getViewport({scale:2});
+      const c = document.createElement('canvas'); c.width=vp.width; c.height=vp.height;
+      await page.render({canvasContext:c.getContext('2d'), viewport:vp}).promise;
+      out.push(await new Promise(r=>c.toBlob(r,'image/png')));
+    }
+  }
+  return out;
+}
+async function readReport(){
+  if(!imp.files.length){ toast('Choose the report first'); return; }
+  imp.busy=true; imp.rows=[]; imp.total=null; imp.status='Preparing pages…'; render();
+  try{
+    const sample = await claude.use('sample');
+    if(!sample) throw new Error('Claude is not available in this view');
+    const lim = await sample.limits().catch(()=>null);
+    if(!lim || !lim.images) throw new Error('Image reading is not available in this view');
+    const blobs = await filesToImages(imp.files, Math.min(lim.images.maxCount,6));
+    if(!blobs.length) throw new Error('No pages could be prepared');
+    imp.status='Reading report… (this can take up to a minute)'; render();
+    const data = await sample.json(IMP_PROMPT, {images:blobs, cache:false, modelTier:'default'});
+    const r2 = n=>Math.round(n*100)/100;
+    imp.rows = (data.rows||[]).map(r=>{
+      const end=parseFloat(r.milepost), test=parseFloat(r.testMiles), dir=String(r.dir||'').toUpperCase();
+      let lo=NaN, hi=NaN;
+      if(isFinite(end)&&isFinite(test)&&(dir==='U'||dir==='D')){
+        const st = r2(dir==='U'?end-test:end+test);
+        lo=Math.min(st,r2(end)); hi=Math.max(st,r2(end));
+      }
+      const clean = String(r.subdivision||'').replace(/[^a-z ]/gi,'').trim().toLowerCase();
+      return {inc:isFinite(lo), sub:SUBS.find(s=>s.toLowerCase()===clean)||'', track:impMapTrack(r), dir, end, test, lo, hi, trk:r.trk||'', name:r.trackName||'', remark:r.remark||''};
+    });
+    imp.total = data.reportTotalTest!=null && data.reportTotalTest!=='' ? parseFloat(data.reportTotalTest) : null;
+    imp.status = imp.rows.length ? 'Review below, then log.' : 'No tested rows found — check this is the right report.';
+  }catch(e){
+    const code = e && e.code;
+    if(code==='not_granted') imp.status = 'Claude access was not allowed for this page.';
+    else if(code==='rate_limited') imp.status = 'Too many requests right now — try again shortly.';
+    else if(code==='image_rejected') imp.status = 'One of the pages could not be read — try a clearer scan.';
+    else imp.status = 'Could not read report: ' + ((e && (e.message||code)) || e);
+  }
+  imp.files = []; // done with the picked file(s) -- drop the reference now that they're read
+  imp.busy=false; render();
+}
+async function importLog(){
+  const sel = imp.rows.filter(r=>r.inc && r.sub && r.track && isFinite(r.lo) && remaining[r.sub]);
+  if(!sel.length){ toast('Nothing to log'); return; }
+  const touched = new Set();
+  for(const r of sel){
+    if(!remaining[r.sub].tracks[r.track]) remaining[r.sub].tracks[r.track]=[];
+    remaining[r.sub].tracks[r.track] = subtractInterval(remaining[r.sub].tracks[r.track]||[], [r.lo,r.hi]);
+    touched.add(r.sub);
+    await pushHistoryMerged({sub:r.sub, track:r.track, lo:r.lo, hi:r.hi, dir:r.dir, ts:r.ts||null, type:'import'});
+  }
+  for(const s of touched) await saveRemaining(s);
+  const n = sel.length;
+  imp.rows=[]; imp.total=null; imp.files=[];
+  imp.status = `Logged ${n} range${n>1?'s':''} from the report.`;
+  toast(imp.status); render();
+}
+const IMP_CHAT_PROMPT = `Read the attached rail Car Movement Report. For every table row that has a number in the MILES > TEST column specifically (not RUN, not blank), output one line, pipe-separated, in exactly this format and nothing else:
+SUBDIVISION|TRK|TRACK NAME|REMARKS|DIR|MILEPOST|TESTMILES
+- SUBDIVISION is that row's block header subdivision (drop any leading comma).
+- DIR is the single letter in the D column (U or D).
+- Copy numbers exactly as printed, don't calculate or round anything.
+After all the rows, add one final line: TOTAL|<the TEST value on the "Report Totals" line>
+Output only these lines, no other text.`;
+function parsePastedRows(){
+  const box = document.getElementById('imp-paste');
+  const lines = (box?box.value:'').split('\n').map(l=>l.trim()).filter(Boolean);
+  const rows = []; let total = null;
+  const r2 = n=>Math.round(n*100)/100;
+  for(const line of lines){
+    const parts = line.split('|').map(p=>p.trim());
+    if(parts[0] && parts[0].toUpperCase()==='TOTAL'){ total = parseFloat(parts[1]); continue; }
+    if(parts.length<7) continue;
+    const [subdivision,trk,trackName,remark,dirRaw,milepostStr,testStr] = parts;
+    const end=parseFloat(milepostStr), test=parseFloat(testStr), dir=String(dirRaw||'').toUpperCase();
+    let lo=NaN, hi=NaN;
+    if(isFinite(end)&&isFinite(test)&&(dir==='U'||dir==='D')){
+      const st = r2(dir==='U'?end-test:end+test);
+      lo=Math.min(st,r2(end)); hi=Math.max(st,r2(end));
+    }
+    const clean = String(subdivision||'').replace(/[^a-z ]/gi,'').trim().toLowerCase();
+    rows.push({inc:isFinite(lo), sub:SUBS.find(s=>s.toLowerCase()===clean)||'', track:impMapTrack({trackName,remark}), dir, end, test, lo, hi, trk:trk||'', name:trackName||'', remark:remark||''});
+  }
+  if(!rows.length){ toast('No rows found — check the pasted format'); return; }
+  imp.rows = rows; imp.total = isFinite(total)?total:null;
+  imp.status = `Parsed ${rows.length} row${rows.length>1?'s':''} — review below.`;
+  render();
+}
+
+// ---- XML daily-report import (deterministic, no AI needed) ----
+function mapXmlTrack(text){
+  const t = String(text||'').toUpperCase();
+  if(t.includes('SIDING')) return 'Siding';
+  if(t.includes('CROSSOVER') || t.includes('COSSOVER') || /\bXOVER\b/.test(t)) return 'Xover';
+  if(t.includes('YARD')) return 'Yard';
+  if(t.includes('SOUTH')) return 'South';
+  if(t.includes('NORTH')) return (t.includes('DIVERSION') || /\bDT\b/.test(t)) ? 'North DT' : 'North';
+  if(t.includes('MAIN') || /\bML\b/.test(t)) return 'Main';
+  return '';
+}
+// Parses the Sperry report's "MM/DD/YYYY" + "HH:MM" fields into a real
+// timestamp, so an XML can be imported on any day and still get logged under
+// the date the testing actually happened, not the date it was uploaded.
+// Returns null if either piece is missing or unparseable (caller then falls
+// back to "now", same as every other import path).
+function parseXmlDateTime(dateStr, timeStr){
+  const dm = String(dateStr||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(!dm) return null;
+  const tm = String(timeStr||'').trim().match(/^(\d{1,2}):(\d{2})$/);
+  const hh = tm ? parseInt(tm[1],10) : 12, mm = tm ? parseInt(tm[2],10) : 0;
+  const d = new Date(parseInt(dm[3],10), parseInt(dm[1],10)-1, parseInt(dm[2],10), hh, mm, 0);
+  const t = d.getTime();
+  return isFinite(t) ? t : null;
+}
+function xmlSidingName(text){
+  const m = String(text||'').match(/^(.*?)\s*SIDING\b/i);
+  if(!m || !m[1].trim()) return '';
+  return m[1].trim().toLowerCase().replace(/\b\w/g, c=>c.toUpperCase());
+}
+function parseXmlReport(xmlText){
+  const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+  if(doc.querySelector('parsererror')) throw new Error('This file is not valid XML');
+  const locations = doc.querySelectorAll('Locations > Location');
+  if(!locations.length) throw new Error('No Location/Movement data found — is this a Sperry daily report XML?');
+  const rawRows = [];
+  locations.forEach(loc=>{
+    const subdivRaw = (loc.querySelector('SUBDIV')?.textContent || '').trim();
+    const clean = subdivRaw.replace(/[^a-z ]/gi,'').trim().toLowerCase();
+    const sub = SUBS.find(s=>s.toLowerCase()===clean) || '';
+    let prevMp = null, lastTrack = '';
+    loc.querySelectorAll('Movements > Movement').forEach(mv=>{
+      const trk = (mv.querySelector('TRACKID')?.textContent || '').trim();
+      const mpWhole = parseFloat((mv.querySelector('MILEPOST')?.textContent || '').trim());
+      const incRaw = (mv.querySelector('INC')?.textContent || '').trim();
+      const inc = incRaw === '' ? 0 : parseFloat(incRaw);
+      if(!isFinite(mpWhole)) return;
+      const mp = mpWhole + (isFinite(inc) ? inc : 0);
+      const isRoad = !trk || trk.toUpperCase()==='RD';
+      const mcom = (mv.querySelector('MCOM')?.textContent || '').trim();
+      const isTravelOnly = /^RUN TO (CLEAR|TEST)\b/i.test(mcom);
+      if(!isRoad && !isTravelOnly && prevMp!==null){
+        const delta = mp - prevMp;
+        if(Math.abs(delta) > 0.005){
+          const trcom = (mv.querySelector('TRCOM')?.textContent || '').trim();
+          const time = (mv.querySelector('TIME')?.textContent || '').trim();
+          const date = (mv.querySelector('DATE')?.textContent || '').trim();
+          const text = [trcom, mcom].filter(Boolean).join(' ');
+          let track = mapXmlTrack(text);
+          if(track) lastTrack = track; else track = lastTrack;
+          const name = track==='Siding' ? xmlSidingName(text) : '';
+          const lo = Math.min(prevMp, mp), hi = Math.max(prevMp, mp);
+          rawRows.push({
+            inc:true, sub, track, dir: delta>0?'U':'D',
+            end: fmt(mp), test: fmt(Math.abs(delta)),
+            lo: fmt(lo), hi: fmt(hi),
+            trk, name: name || text || '(no remark)', remark: time,
+            ts: parseXmlDateTime(date, time)
+          });
+        }
+      }
+      prevMp = mp;
+    });
+  });
+  const merged = [];
+  for(const row of rawRows){
+    const last = merged[merged.length-1];
+    if(last && last.sub===row.sub && last.track===row.track && last.name===row.name &&
+       (Math.abs(last.hi-row.lo)<0.02 || Math.abs(last.lo-row.hi)<0.02)){
+      last.lo = fmt(Math.min(last.lo, row.lo));
+      last.hi = fmt(Math.max(last.hi, row.hi));
+      last.test = fmt(last.test + row.test);
+      last.end = row.end; last.dir = row.dir; last.remark = last.remark + ', ' + row.remark;
+      if(row.ts) last.ts = row.ts;
+    } else {
+      merged.push({...row});
+    }
+  }
+  return merged;
+}
+async function readXmlFile(file){
+  if(!file){ toast('Choose the XML file first'); return; }
+  imp.busy=true; imp.rows=[]; imp.total=null; imp.status='Reading XML report…'; render();
+  try{
+    const text = await file.text();
+    const rows = parseXmlReport(text);
+    if(!rows.length) throw new Error('No tested segments found in this file');
+    imp.rows = rows;
+    imp.total = null;
+    imp.status = `Parsed ${rows.length} segment${rows.length>1?'s':''} directly from the XML — review below.`;
+  }catch(e){
+    imp.status = 'Could not read XML: ' + ((e && e.message) || e);
+  }
+  window._impXmlFile = null; // done with the picked file -- drop the reference now that it's read
+  imp.busy=false; render();
+}
+function impSubSelect(i, val){
+  if(val === '__new__'){
+    imp.rows[i]._newSubMode = true;
+  } else {
+    imp.rows[i].sub = val;
+    imp.rows[i]._newSubMode = false;
+  }
+  render();
+}
+async function impCreateSubForRow(i){
+  const inp = document.getElementById(`imp-newsub-${i}`);
+  const name = (inp?inp.value:'').trim();
+  if(!name){ toast('Enter a name'); return; }
+  if(!master[name]){
+    master[name] = {tracks:{}, checklist:{}};
+    remaining[name] = {tracks:{}, checklist:{}, checklistDone:{}};
+    await saveMaster(name);
+    await saveRemaining(name);
+  }
+  if(!SUBS.includes(name)) SUBS.push(name);
+  if(!ui.order.includes(name)){ ui.order.push(name); await saveUi(); }
+  imp.rows[i].sub = name;
+  imp.rows[i]._newSubMode = false;
+  toast(`Added ${name}`);
+  render();
+}
+function impAddManualRow(){
+  const sub = document.getElementById('imp-m-sub').value;
+  const track = document.getElementById('imp-m-track').value;
+  const end = parseFloat(document.getElementById('imp-m-mp').value);
+  const test = parseFloat(document.getElementById('imp-m-test').value);
+  const dir = document.getElementById('imp-m-dir').value;
+  if(!sub || !track || isNaN(end) || isNaN(test) || !(dir==='U'||dir==='D')){ toast('Fill milepost, test miles and direction'); return; }
+  const r2 = n=>Math.round(n*100)/100;
+  const st = r2(dir==='U' ? end-test : end+test);
+  const lo = Math.min(st, r2(end)), hi = Math.max(st, r2(end));
+  imp.rows.push({inc:true, sub, track, dir, end:r2(end), test:r2(test), lo, hi, trk:'', name:'manual entry', remark:''});
+  document.getElementById('imp-m-mp').value=''; document.getElementById('imp-m-test').value='';
+  toast('Row added below — add more or log now');
+  render();
+}
+function importHtml(){
+  let h = `<div class="section-title" style="margin-top:0">Import from daily report <span class="chip">beta</span></div><div class="card">`;
+  h += `<label>Daily XML export <span class="chip">exact · no AI needed</span></label>`;
+  h += `<input id="imp-xml-file" type="file" accept=".xml,text/xml,application/xml" onchange="window._impXmlFile=this.files[0]">`;
+  h += `<button onclick="readXmlFile(window._impXmlFile)" ${imp.busy?'disabled':''}>${imp.busy?'Working…':'Read XML report'}</button>`;
+  if(imp.status) h += `<div class="seg-list">${escapeHtml(imp.status)}</div>`;
+  h += `<details style="margin-top:10px"><summary>Or use a PDF / photo report</summary>
+    <div class="seg-list" style="margin-top:8px">Reads the pages with Claude; may not be available in every view.</div>
+    <label style="margin-top:6px">Report PDF or photos</label>
+    <input id="imp-file" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" multiple onchange="impPick(this.files)">
+    <button onclick="readReport()" ${imp.busy?'disabled':''}>${imp.busy?'Working…':'Read report'}</button>
+  </details>`;
+  h += `<details style="margin-top:10px"><summary>Or paste rows Claude extracted for you</summary>
+    <div class="seg-list" style="margin-top:8px">1. Copy this prompt. 2. Start a normal Claude chat, attach the report, paste the prompt. 3. Paste Claude's reply below.</div>
+    <button class="secondary" style="margin-top:4px" onclick="copyText(IMP_CHAT_PROMPT)">Copy prompt for Claude chat</button>
+    <label style="margin-top:8px">Claude's reply</label>
+    <textarea id="imp-paste" rows="5" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:monospace;margin-bottom:8px"></textarea>
+    <button onclick="parsePastedRows()">Parse pasted rows</button>
+  </details>`;
+  if(imp.rows.length){
+    const sum = Math.round(imp.rows.filter(r=>r.inc).reduce((s,r)=>s+(isFinite(r.test)?r.test:0),0)*100)/100;
+    if(imp.total!=null){
+      const ok = Math.abs(sum-imp.total)<0.02;
+      h += `<div class="seg-list">${ok?'✅':'⚠️'} Checked rows total ${fmt(sum)} mi; report total ${fmt(imp.total)} mi${ok?'':' — check for a missed or misread row before logging'}</div>`;
+    }
+    imp.rows.forEach((r,i)=>{
+      const rng = isFinite(r.lo) ? `mp${fmt(r.hi)}–${fmt(r.lo)} (${fmt(r.hi-r.lo)} mi)` : `${r.dir||'?'} to mp${isFinite(r.end)?fmt(r.end):'?'}, ${isFinite(r.test)?fmt(r.test):'?'} mi — direction unclear, check manually`;
+      h += `<div style="border-top:1px solid var(--border);padding:6px 0">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)"><input type="checkbox" style="width:16px;height:16px;margin:0;flex-shrink:0" ${r.inc?'checked':''} ${isFinite(r.lo)?'':'disabled'} onchange="imp.rows[${i}].inc=this.checked;render()"> ${escapeHtml(rng)}</label>
+        <div class="row"><div><select onchange="impSubSelect(${i},this.value)"><option value="">Sub?</option>${SUBS.map(s=>`<option ${s===r.sub?'selected':''}>${s}</option>`).join('')}<option value="__new__">+ New subdivision…</option></select></div>
+        <div><select onchange="imp.rows[${i}].track=this.value"><option value="">Track?</option>${trackOptionsFor(r.sub).map(t=>`<option ${t===r.track?'selected':''}>${t}</option>`).join('')}</select></div></div>
+        ${r._newSubMode ? `<div class="row" style="margin-top:-4px"><div><input id="imp-newsub-${i}" placeholder="New subdivision name"></div><div style="flex:0 0 auto"><button class="secondary" onclick="impCreateSubForRow(${i})">Create &amp; assign</button></div></div>` : ''}
+        <div class="seg-list" style="margin-top:-4px">${escapeHtml((r.trk?r.trk+' · ':'')+r.name+(r.remark?' · '+r.remark:''))}</div>
+      </div>`;
+    });
+    h += `<button onclick="importLog()">Log checked ranges</button>`;
+  }
+  return h + '</div>';
+}
+
+function render(){
+  let html = `<h1>Rail Test Tracker</h1><div class="sub">Miles remaining to test, by subdivision</div>`;
+
+  const logSectionOpen = !!ui.logSectionOpen;
+  html += `<div class="card">
+    <div class="subdiv-head" onclick="toggleLogSection()" style="cursor:pointer">
+      <span class="subdiv-name">${logSectionOpen?'▾':'▸'} Log tested miles</span>
+    </div>`;
+  if(logSectionOpen){
+    html += `<label>Subdivision</label><select id="sel-sub" onchange="updateLogTrackOptions()">${SUBS.map(s=>`<option value="${s}" ${s===ui.lastSub?'selected':''}>${s}</option>`).join('')}</select>
+    <label>Track</label><select id="sel-track">${trackOptionsFor(ui.lastSub||SUBS[0]).map(t=>`<option ${t===ui.lastTrack?'selected':''}>${t}</option>`).join('')}</select>
+    <div class="row"><div><label>From MP</label><input id="in-from" type="number" step="0.01"></div>
+    <div><label>To MP</label><input id="in-to" type="number" step="0.01"></div></div>
+    <button onclick="logTested()">Log tested range</button>`;
+  }
+  html += `</div>`;
+
+  html += importHtml();
+
+  html += `<div class="section-title" style="margin-top:0">Recently tested <span class="chip" style="cursor:pointer" onclick="confirmUndoAllHistory()">${pendingUndoAllHistory?'tap again to confirm':'undo all'}</span></div>
+  <div class="card">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+    <button class="secondary" onclick="copyAllRemainingToday()">Copy Remaining Miles (today's subs)</button>
+    <button class="secondary" onclick="copyAllTodaySegments()">Copy Miles Tested Today (today's subs)</button>
+  </div>`;
+  if(!history.entries.length){
+    html += `<div class="seg-list">Nothing logged yet</div>`;
+  } else {
+    const todayStr = new Date().toDateString();
+    const todayEntries = history.entries.filter(e=>new Date(e.ts).toDateString()===todayStr);
+    const earlierEntries = history.entries.filter(e=>new Date(e.ts).toDateString()!==todayStr).slice(0,20);
+    // Mileage ranges show mp low-to-high by default, but an entry logged from an
+    // XML import carries the direction (U/D) it was actually recorded in, so a
+    // "D" (decreasing-mileage) test shows mp high-to-low to match the report --
+    // entries with no known direction (manual log, checkbox) keep low-to-high.
+    const mpLabel = e => e.dir==='D' ? `mp${fmt(e.hi)}–${fmt(e.lo)}` : `mp${fmt(e.lo)}–${fmt(e.hi)}`;
+    const rowsFor = (list)=> list.length
+      ? list.map(e=>`<div class="checklist-item history-row trk-${trackColorClass(e.kind||e.track)}" style="justify-content:space-between">
+          <span>${e.kind ? `${e.sub} · ${e.kind} · ${e.name}` : `${e.sub} · ${e.track} · ${mpLabel(e)}`} <span class="miles-tag">(${timeAgo(e.ts)})</span></span>
+          <button class="secondary" style="padding:4px 8px;font-size:11px;flex-shrink:0" onclick="undoEntry('${e.id}')">Undo</button>
+        </div>`).join('')
+      : `<div class="seg-list">Nothing here</div>`;
+    const todayOpen = ui.historyOpen ? ui.historyOpen.today !== false : true;
+    const earlierOpen = ui.historyOpen ? !!ui.historyOpen.earlier : false;
+    html += `<details ${todayOpen?'open':''} ontoggle="setHistoryOpen('today', this.open)"><summary>Today (${todayEntries.length})</summary>${rowsFor(todayEntries)}</details>`;
+    html += `<details ${earlierOpen?'open':''} ontoggle="setHistoryOpen('earlier', this.open)"><summary>Earlier (${earlierEntries.length})</summary>${rowsFor(earlierEntries)}</details>`;
+  }
+  html += `</div>`;
+
+  for(const sub of ui.order){
+    const r = remaining[sub]; if(!r) continue;
+    const trackKind = {Siding:'Sidings'};
+    const isExcluded = kind => !!(r.excluded && r.excluded[kind]);
+    const tracks = Object.keys(r.tracks||{}).sort((a,b)=>trackRank(a)-trackRank(b));
+    const totalAll = tracks.reduce((s,t)=> (t==='Xover'||t==='Yard'||isExcluded(trackKind[t]||t)) ? s : s+totalMiles(r.tracks[t]), 0);
+    const isCollapsed = !!ui.collapsed[sub];
+    html += `<div class="card">
+      <div class="subdiv-head">
+        <span class="subdiv-name" onclick="toggleCollapse('${sub}')" style="cursor:pointer">${isCollapsed?'▸':'▾'} ${sub}</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <span class="miles-tag">${fmt(totalAll)} mi left</span>
+          <button class="secondary" style="padding:4px 8px;font-size:11px" onclick="moveToTop('${sub}')">Move to top</button>
+        </span>
+      </div>`;
+    if(!isCollapsed){
+    const skippableTracks = (master[sub] && master[sub].skippableTracks) || [];
+    const skippable = Array.from(new Set([
+      ...Object.keys(r.checklist||{}).filter(k=>(r.checklist[k]||[]).length),
+      ...skippableTracks.filter(t=>r.tracks && r.tracks[t])
+    ]));
+    if(skippable.length){
+      html += `<div class="seg-list" style="margin-bottom:2px">Not testing this cycle:</div>`;
+      skippable.forEach(kind=>{
+        const ex = isExcluded(kind);
+        html += `<div class="checklist-item" style="justify-content:space-between">
+          <span>${kind}</span>
+          <button class="secondary" style="padding:4px 8px;font-size:11px" onclick="toggleExcluded('${sub}','${kind}')">${ex?'Skipped — tap to include':'Included — tap to skip'}</button>
+        </div>`;
+      });
+    }
+    for(const t of tracks){
+      if(isExcluded(trackKind[t]||t)) continue;
+      const ivs = r.tracks[t];
+      html += `<div class="track-group trk-${trackColorClass(t)}">
+        <div class="track-row"><span class="track-name">${t}</span><span class="track-miles">${fmt(totalMiles(ivs))} mi</span></div>`;
+      // The named "Sidings" checklist below already lists these same segments as
+      // "Name (mileage)" checkboxes -- skip the plain mp-range list here so a
+      // subdivision with sidings doesn't show the same segments twice.
+      const hasNamedSidingList = t==='Siding' && master[sub].checklist && (master[sub].checklist.Sidings||[]).length;
+      if(hasNamedSidingList){
+        // shown in the Sidings checklist below instead
+      } else if(ivs.length){
+        const sorted = [...ivs].sort((x,y)=>y[1]-x[1]);
+        html += `<div class="seg-list">Segments remaining:</div>`;
+        sorted.forEach(([lo,hi])=>{
+          let label = `mp${fmt(hi)}–${fmt(lo)} (${fmt(hi-lo)} mi)`;
+          if(t==='Siding'){
+            const names = sidingNamesForRange(sub, lo, hi);
+            if(names.length) label += ' — ' + names.join(', ');
+          }
+          html += `<div class="checklist-item"><input type="checkbox" onchange="markSegmentTested('${sub}','${t}',${lo},${hi})"> <span>${label}</span></div>`;
+        });
+      } else {
+        html += `<div class="seg-list">Complete ✅</div>`;
+      }
+      html += `</div>`;
+    }
+    const checklistKinds = Object.keys(r.checklist||{});
+    for(const kind of checklistKinds){
+      const items = r.checklist[kind]||[];
+      if(!items.length) continue;
+      if(isExcluded(kind)) continue;
+      const isSidings = (kind==='Sidings');
+      const done = isSidings ? items.map(label=>{ const rg=parseSidingRange(label); return rg ? sidingIsDone(sub, rg[0], rg[1]) : !!(r.checklistDone[kind]||[])[items.indexOf(label)]; }) : (r.checklistDone[kind]||[]);
+      const doneCount = done.filter(Boolean).length;
+      const checklistOpen = !!(ui.checklistOpen && ui.checklistOpen[sub] && ui.checklistOpen[sub][kind]);
+      html += `<div class="track-group trk-${trackColorClass(kind)}"><details ${checklistOpen?'open':''} ontoggle="setChecklistOpen('${sub}','${kind}', this.open)"><summary>${kind} (${doneCount}/${items.length} done)</summary>`;
+      items.forEach((name,i)=>{
+        const onchange = isSidings ? `toggleSidingDone('${sub}',${i},this.checked)` : `toggleCheck('${sub}','${kind}',${i})`;
+        html += `<div class="checklist-item"><input type="checkbox" ${done[i]?'checked':''} onchange="${onchange}"> <span>${name}</span></div>`;
+      });
+      html += `</details></div>`;
+    }
+    html += `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="secondary" onclick="resetCycle('${sub}')">Reset cycle</button><button class="secondary" onclick="copySegments('${sub}')">Copy Remaining Miles</button><button class="secondary" onclick="copyTodaySegments('${sub}')">Copy Miles Tested Today</button></div>`;
+    }
+    html += `</div>`;
+  }
+
+  html += masterEditHtml();
+
+  html += `<div class="card" style="text-align:center">
+    <button class="danger" onclick="resetAll()">Reset all subdivisions</button>
+  </div>`;
+
+  document.getElementById('app').innerHTML = html;
+}
+
+init();
+</script>
+</body>
+</html>
