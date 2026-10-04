@@ -279,9 +279,45 @@ function toast(msg){
   setTimeout(()=>t.classList.remove('show'),1800);
 }
 
+// True only inside a Claude Artifact, where a global `claude` object with a
+// working `.use()` is provided by the runtime. Anywhere else -- the file
+// opened directly, or hosted as a plain static page -- this is false, and the
+// app falls back to storing its data in the browser instead (see localDb()).
+function hasClaudeRuntime(){
+  return typeof claude !== 'undefined' && !!claude && typeof claude.use === 'function';
+}
+// A drop-in stand-in for Claude's `db` capability, backed by localStorage, so
+// the exact same db.doc(path).get()/.set() calls everywhere else in this file
+// work unchanged whether the data is actually in Claude's database or just in
+// this browser. Used when hasClaudeRuntime() is false -- e.g. a coworker who
+// opened this file (or a plain hosted copy of it) without Claude at all. Data
+// in this mode stays on that one device/browser only; it isn't shared or
+// synced anywhere.
+function localDb(){
+  const key = path => 'railTestTracker:' + path;
+  return {
+    doc(path){
+      return {
+        async get(){
+          try{
+            const raw = localStorage.getItem(key(path));
+            return raw != null ? {exists:true, data:()=>JSON.parse(raw)} : {exists:false};
+          }catch(e){ return {exists:false}; }
+        },
+        async set(val){
+          try{ localStorage.setItem(key(path), JSON.stringify(val)); }
+          catch(e){ /* storage unavailable/full -- data just won't persist across reloads */ }
+        }
+      };
+    }
+  };
+}
+
 async function init(){
-  db = await claude.use('db');
-  if(!db){ document.getElementById('app').innerHTML='<h1>Rail Test Tracker</h1><div class="sub">Storage unavailable in this view.</div>'; return; }
+  try{
+    db = hasClaudeRuntime() ? await claude.use('db') : null;
+  }catch(e){ db = null; }
+  if(!db) db = localDb();
   for(const sub of SUBS){
     let mdoc = await db.doc(`master/${sub}`).get().catch(()=>null);
     if(!mdoc || !mdoc.exists){
@@ -1351,6 +1387,10 @@ async function filesToImages(files, max){
 }
 async function readReport(){
   if(!imp.files.length){ toast('Choose the report first'); return; }
+  if(!hasClaudeRuntime()){
+    imp.status = "This PDF/photo reader needs Claude, which isn't available here -- use the XML import above instead (exact, no AI needed).";
+    render(); return;
+  }
   imp.busy=true; imp.rows=[]; imp.total=null; imp.status='Preparing pages…'; render();
   try{
     const sample = await claude.use('sample');
