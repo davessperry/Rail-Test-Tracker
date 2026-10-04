@@ -510,6 +510,17 @@ async function init(){
   ui.order = ui.order.filter(sub => !(master[sub] && master[sub]._deleted));
   if(ui.order.length !== orderBefore) await saveUi();
 
+  // SUBS (used by the manual "Log tested miles" dropdown, the import-row
+  // subdivision picker, and XML/pasted-report subdivision matching) is just
+  // a hardcoded default list that resets to the original six on every page
+  // load. Sync it to ui.order here so a custom subdivision added last
+  // session shows up in those dropdowns too, and a deleted one drops out of
+  // them -- without this, those three spots kept working off the stale
+  // reset list even though the subdivision cards themselves (which read
+  // ui.order directly) were already correct.
+  for(const sub of ui.order){ if(!SUBS.includes(sub)) SUBS.push(sub); }
+  for(let i=SUBS.length-1;i>=0;i--){ if(!ui.order.includes(SUBS[i])) SUBS.splice(i,1); }
+
   let hdoc = await db.doc('history/log').get().catch(()=>null);
   if(!hdoc || !hdoc.exists){
     history = {entries:[]};
