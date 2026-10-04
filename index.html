@@ -937,7 +937,6 @@ function copyAllRemainingToday(){
     const line = data.suffixLine ? `${sub}: ${data.totalLine} ${data.suffixLine}` : `${sub}: ${data.totalLine}`;
     rows.push([line, '']);
   });
-  rows.push(['','']);
   const titleRows = [];
   datas.forEach(({data}, i)=>{
     titleRows.push(rows.length);
