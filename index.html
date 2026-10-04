@@ -318,10 +318,31 @@ async function init(){
     db = hasClaudeRuntime() ? await claude.use('db') : null;
   }catch(e){ db = null; }
   if(!db) db = localDb();
-  for(const sub of SUBS){
+
+  // Load ui/state FIRST. ui.order is the persisted, authoritative list of which
+  // subdivisions exist -- the original six, plus any custom ones added via
+  // "Add subdivision", minus any that were deleted. It has to load before the
+  // master/remaining loop below, because SUBS itself is just a hardcoded
+  // constant that resets to the original six on every page load -- it doesn't
+  // remember a custom subdivision someone added last time.
+  let uidoc = await db.doc('ui/state').get().catch(()=>null);
+  if(!uidoc || !uidoc.exists){
+    ui = {order:[...SUBS], collapsed:{}};
+    await db.doc('ui/state').set(ui);
+  } else {
+    ui = deepCopy(uidoc.data());
+    for(const sub of SUBS){ if(!ui.order.includes(sub)) ui.order.push(sub); }
+  }
+
+  // Load master/remaining for every subdivision in ui.order too, not just the
+  // hardcoded SUBS -- otherwise a custom subdivision's data sits safely saved
+  // in storage but never gets read back in, and it looks like it "disappeared"
+  // on reload even though nothing was actually lost.
+  const activeSubs = Array.from(new Set([...SUBS, ...ui.order]));
+  for(const sub of activeSubs){
     let mdoc = await db.doc(`master/${sub}`).get().catch(()=>null);
     if(!mdoc || !mdoc.exists){
-      const seed = deepCopy(DEFAULT_MASTER[sub]);
+      const seed = deepCopy(DEFAULT_MASTER[sub] || {tracks:{}, checklist:{}});
       await db.doc(`master/${sub}`).set(seed);
       master[sub] = seed;
     } else master[sub] = deepCopy(mdoc.data());
@@ -480,14 +501,15 @@ async function init(){
       await saveRemaining(sub);
     }
   }
-  let uidoc = await db.doc('ui/state').get().catch(()=>null);
-  if(!uidoc || !uidoc.exists){
-    ui = {order:[...SUBS], collapsed:{}};
-    await db.doc('ui/state').set(ui);
-  } else {
-    ui = deepCopy(uidoc.data());
-    for(const sub of SUBS){ if(!ui.order.includes(sub)) ui.order.push(sub); }
-  }
+  // Self-healing: a subdivision removed via deleteSubdivision() is marked
+  // _deleted in storage rather than actually erased. Make sure it stays out of
+  // ui.order here even if it's one of the hardcoded SUBS re-added above --
+  // otherwise a deleted Cascade/Thompson/etc. (or a deleted custom one) would
+  // silently reappear the next time the page loads.
+  const orderBefore = ui.order.length;
+  ui.order = ui.order.filter(sub => !(master[sub] && master[sub]._deleted));
+  if(ui.order.length !== orderBefore) await saveUi();
+
   let hdoc = await db.doc('history/log').get().catch(()=>null);
   if(!hdoc || !hdoc.exists){
     history = {entries:[]};
