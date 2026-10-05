@@ -2041,6 +2041,9 @@ function render(){
     }
     for(const t of tracks){
       if(isExcluded(trackKind[t]||t)) continue;
+      // A subdivision with a named Sidings checklist shows its Siding mileage in
+      // that checklist's header (below) instead of a separate "Siding" block.
+      if(t==='Siding' && master[sub].checklist && (master[sub].checklist.Sidings||[]).length) continue;
       const ivs = r.tracks[t];
       html += `<div class="track-group trk-${trackColorClass(t)}">
         <div class="track-row"><span class="track-name">${t}</span><span class="track-miles">${fmt(totalMiles(ivs))} mi</span></div>`;
@@ -2075,7 +2078,7 @@ function render(){
       const done = isSidings ? items.map(label=>{ const rg=parseSidingRange(label); return rg ? sidingIsDone(sub, rg[0], rg[1]) : !!(r.checklistDone[kind]||[])[items.indexOf(label)]; }) : (r.checklistDone[kind]||[]);
       const doneCount = done.filter(Boolean).length;
       const checklistOpen = !!(ui.checklistOpen && ui.checklistOpen[sub] && ui.checklistOpen[sub][kind]);
-      html += `<div class="track-group trk-${trackColorClass(kind)}"><details ${checklistOpen?'open':''} ontoggle="setChecklistOpen('${sub}','${kind}', this.open)"><summary>${kind} (${doneCount}/${items.length} done)</summary>`;
+      html += `<div class="track-group trk-${trackColorClass(kind)}"><details ${checklistOpen?'open':''} ontoggle="setChecklistOpen('${sub}','${kind}', this.open)"><summary>${kind} (${doneCount}/${items.length} done)${isSidings && r.tracks && r.tracks.Siding ? ` <span class="track-miles" style="float:right;color:var(--ink);font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:14px">${fmt(totalMiles(r.tracks.Siding))} mi</span>` : ''}</summary>`;
       items.forEach((name,i)=>{
         const onchange = isSidings ? `toggleSidingDone('${sub}',${i},this.checked)` : `toggleCheck('${sub}','${kind}',${i})`;
         html += `<div class="checklist-item"><input type="checkbox" ${done[i]?'checked':''} onchange="${onchange}"> <span>${name}</span></div>`;
