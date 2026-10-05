@@ -530,6 +530,22 @@ async function init(){
   // ui.order here even if it's one of the hardcoded SUBS re-added above --
   // otherwise a deleted Cascade/Thompson/etc. (or a deleted custom one) would
   // silently reappear the next time the page loads.
+  // Self-healing: remaining mileage must lie inside the track's master mileage.
+  // An earlier Undo of a test logged outside the real track could leave an extra
+  // "phantom" segment in remaining -- trim any such leftovers once on load.
+  for(const sub of ui.order){
+    if(!remaining[sub] || !remaining[sub].tracks || !master[sub]) continue;
+    let changed = false;
+    for(const t of Object.keys(remaining[sub].tracks)){
+      if(!(master[sub].tracks && master[sub].tracks[t])) continue;
+      const before = remaining[sub].tracks[t];
+      const after = clipToMaster(sub, t, before);
+      const r2 = a=>JSON.stringify(a.map(([x,y])=>[Math.round(x*100)/100, Math.round(y*100)/100]));
+      if(r2(before)!==r2(after)){ remaining[sub].tracks[t] = after; changed = true; }
+    }
+    if(changed) await saveRemaining(sub);
+  }
+
   const orderBefore = ui.order.length;
   ui.order = ui.order.filter(sub => !(master[sub] && master[sub]._deleted));
   if(ui.order.length !== orderBefore) await saveUi();
@@ -678,6 +694,27 @@ async function pushHistoryMerged(entry){
   }
   await pushHistory(entry);
 }
+// Remaining mileage can only ever be part of a track's master mileage. This
+// trims a list of intervals to what falls inside the track's master segments --
+// so undoing a test logged outside the real track (or on a segment/track that
+// was since deleted) can't leave phantom "remaining" miles behind.
+function clipToMaster(sub, track, ivs){
+  const m = master[sub] && master[sub].tracks && master[sub].tracks[track];
+  if(!m) return ivs;
+  const out = [];
+  m.forEach(r=>{ out.push(...intersectIntervals(ivs, r)); });
+  return mergeContiguous(out, 0.005).map(([a,b])=>[Math.round(a*100)/100, Math.round(b*100)/100]);
+}
+// Puts a previously-tested range back into remaining (used by Undo) -- only the
+// part that really belongs to the track's master data.
+function restoreTested(sub, track, lo, hi){
+  if(!(master[sub] && master[sub].tracks && master[sub].tracks[track])) return; // track no longer exists
+  if(!remaining[sub].tracks) remaining[sub].tracks = {};
+  const back = clipToMaster(sub, track, [[lo,hi]]);
+  let rem = remaining[sub].tracks[track] || [];
+  back.forEach(r=>{ rem = addIntervalBack(rem, r); });
+  remaining[sub].tracks[track] = rem;
+}
 async function undoEntry(id){
   const idx = history.entries.findIndex(e=>e.id===id);
   if(idx===-1) return;
@@ -702,8 +739,7 @@ async function undoEntry(id){
     render();
     return;
   }
-  if(!remaining[e.sub].tracks[e.track]) remaining[e.sub].tracks[e.track]=[];
-  remaining[e.sub].tracks[e.track] = addIntervalBack(remaining[e.sub].tracks[e.track], [e.lo, e.hi]);
+  restoreTested(e.sub, e.track, e.lo, e.hi);
   await saveRemaining(e.sub);
   history.entries.splice(idx,1);
   await saveHistory();
@@ -738,8 +774,7 @@ async function undoAllHistory(){
       subsAffected.add(e.sub);
       continue;
     }
-    if(!remaining[e.sub].tracks[e.track]) remaining[e.sub].tracks[e.track]=[];
-    remaining[e.sub].tracks[e.track] = addIntervalBack(remaining[e.sub].tracks[e.track], [e.lo, e.hi]);
+    restoreTested(e.sub, e.track, e.lo, e.hi);
     subsAffected.add(e.sub);
   }
   for(const sub of subsAffected) await saveRemaining(sub);
