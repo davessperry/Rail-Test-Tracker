@@ -9,6 +9,10 @@ A mobile-friendly web app for tracking rail test mileage across subdivisions (Ca
 - `index.html` — the entire app: a single self-contained HTML/CSS/JS file.
 - `apple-touch-icon.png` — the icon used when the app is added to an iPhone home screen.
 
+## Built-in track list
+
+Edit master data > "Add a subdivision from the Master tracks list" lets anyone search 178 subdivisions and add one (its tracks, sidings and crossovers) with a tap. The list is a snapshot of the company Master tracks list dated August 17th, 2026 (track names and mileposts only), embedded in `index.html` as `BUILTIN_TRACK_LIST`. A newer spreadsheet can be loaded from the same card.
+
 ## How this repo is used
 
 This repo is a backup and change history for the app's source code. The actual running app lives on Claude's Artifact platform (the "Live app" link above), which also provides the app's data storage (remaining miles, test history, checklist state). Opening `index.html` directly from this repo (e.g. via GitHub Pages) will **not** have working data storage, since that storage is a feature of the Artifact platform, not something built into the file itself.
