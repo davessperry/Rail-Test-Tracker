@@ -1787,7 +1787,8 @@ function xmlTrackFromMsfx(msfx, trackText){
   const m = String(msfx||'').trim().toUpperCase();
   if(m==='SD') return 'Siding';
   if(m==='XOVER') return 'Xover';
-  if(m==='YD') return 'Yard';
+  // YD (yard) rows are deliberately left blank, as before, so the person picks the track
+  if(m==='YD') return '';
   return mtTrackName(m, trackText) || '';
 }
 function mapXmlTrack(text){
