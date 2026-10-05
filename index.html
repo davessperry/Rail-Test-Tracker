@@ -1316,6 +1316,205 @@ async function addMasterSubdivision(){
   toast(`Added ${name}`);
   render();
 }
+
+// ---------- Import a subdivision from the company "Master tracks list" spreadsheet ----------
+// The sheet has one row per track segment for every subdivision/yard on the
+// railway (thousands of rows). We read it in the browser (SheetJS, loaded on
+// demand so the app still works offline until this feature is used), group the
+// rows by subdivision, and let the person pick one to add to the master data.
+//   MSFX code -> app track: SI=Main, NT=North, ST=South, DT=North DT, ET=East,
+//   WT=West, #1..#4=Track n, CT/MT=named from the track id; SD -> Sidings
+//   (named, with mileposts); XOVER -> Xovers. Yard, spur and wye rows are
+//   left out. Touching segments on a track are merged into one.
+let mt = {data:null, fileName:'', status:'', busy:false, sel:null, query:''};
+
+function mtCleanName(n){
+  n = String(n||'').replace(/['"`\\]/g,'').replace(/\s+/g,' ').trim();
+  if(n && n===n.toUpperCase()) n = n.toLowerCase().replace(/\b[a-z]/g, c=>c.toUpperCase());
+  return n;
+}
+function mtTrackName(msfx, trackId){
+  const m = String(msfx||'').trim().toUpperCase();
+  if(m==='SI' || m.startsWith('SI ')) return 'Main';
+  if(m==='NT') return 'North';
+  if(m==='ST') return 'South';
+  if(m==='DT') return 'North DT';
+  if(m==='ET') return 'East';
+  if(m==='WT') return 'West';
+  const hash = m.match(/^#(\d)$/); if(hash) return 'Track '+hash[1];
+  if(m==='CT' || m==='MT') return mtCleanName(String(trackId||'').replace(/\s*\(.*$/,'')) || m;
+  return null;
+}
+// rows: array of arrays (first row = headers). Pure function -- no DOM, no storage.
+function parseMasterTrackRows(rows){
+  const hdr = (rows[0]||[]).map(h=>String(h==null?'':h).trim().toUpperCase());
+  const col = name => hdr.indexOf(name);
+  const iClass=col('LINE CLASS'), iSub=col('SUB/YARD'), iMsfx=col('MSFX'), iId=col('TRACK ID'), iFrom=col('FROM'), iTo=col('TO');
+  if([iClass,iSub,iMsfx,iFrom,iTo].some(i=>i<0)) return {error:"Couldn't find the expected columns (Line Class, SUB/YARD, MSFX, From, To) -- is this the Master tracks list?"};
+  const subs = {};
+  const seen = new Set();
+  for(let r=1;r<rows.length;r++){
+    const row = rows[r]; if(!row) continue;
+    const cls = String(row[iClass]||'').trim().toUpperCase();
+    if(cls==='YARD' || cls==='SPUR' || !cls) continue;
+    const rawSub = String(row[iSub]||'').trim(); if(!rawSub) continue;
+    const key = rawSub.toUpperCase();
+    const msfx = String(row[iMsfx]||'').trim().toUpperCase();
+    const id = iId>=0 ? String(row[iId]||'').trim() : '';
+    const from = parseFloat(row[iFrom]), to = parseFloat(row[iTo]);
+    const dupKey = [key,msfx,id,row[iFrom],row[iTo]].join('|');
+    if(seen.has(dupKey)) continue; seen.add(dupKey);
+    const S = subs[key] || (subs[key] = {key, name:mtCleanName(rawSub), tracks:{}, sidings:[], xovers:[], skipped:0, badXovers:0});
+    if(msfx==='SD'){
+      if(isFinite(from)&&isFinite(to)&&from!==to){ const [lo,hi]=normalize(from,to); S.sidings.push({name:mtCleanName(id)||'Siding', lo, hi}); }
+      continue;
+    }
+    if(msfx==='XOVER'){
+      const nm = mtCleanName(id)||'Crossover';
+      if(isFinite(from)&&isFinite(to)&&to>0&&from>0&&from!==to&&Math.abs(to-from)<5){ const [lo,hi]=normalize(from,to); S.xovers.push({name:nm, lo, hi}); }
+      else { S.xovers.push({name:nm, lo:null, hi:null}); S.badXovers++; }
+      continue;
+    }
+    const t = mtTrackName(msfx, id);
+    if(!t || !isFinite(from) || !isFinite(to) || from===to){ S.skipped++; continue; }
+    (S.tracks[t] = S.tracks[t]||[]).push(normalize(from,to));
+  }
+  const list = [];
+  Object.values(subs).forEach(S=>{
+    Object.keys(S.tracks).forEach(t=>{ S.tracks[t] = mergeContiguous(S.tracks[t], 0.005).map(([a,b])=>[Math.round(a*100)/100, Math.round(b*100)/100]); });
+    // de-duplicate sidings / xovers that appear twice with the same name+range
+    const dd = arr => { const m=new Set(); return arr.filter(x=>{ const k=x.name+'|'+x.lo+'|'+x.hi; if(m.has(k)) return false; m.add(k); return true; }); };
+    S.sidings = dd(S.sidings).sort((a,b)=>b.hi-a.hi);
+    S.xovers = dd(S.xovers);
+    // crossover-only entries (e.g. "Yard Coquitlam") aren't subdivisions to track
+    if(Object.keys(S.tracks).length || S.sidings.length) list.push(S);
+  });
+  list.sort((a,b)=>a.name.localeCompare(b.name));
+  return {list};
+}
+// Turns one parsed subdivision into the app's master-data shape.
+function mtBuildMaster(S){
+  const tracks = {};
+  Object.keys(S.tracks).sort((a,b)=>trackRank(a)-trackRank(b)).forEach(t=>{ tracks[t] = S.tracks[t].map(iv=>[...iv]); });
+  const checklist = {};
+  const lbl = x => x.lo==null ? x.name : `${x.name} (${fmt(x.hi)}-${fmt(x.lo)})`;
+  if(S.sidings.length){
+    checklist.Sidings = S.sidings.map(lbl);
+    tracks.Siding = S.sidings.map(x=>[x.lo,x.hi]);
+  }
+  if(S.xovers.length) checklist.Xovers = S.xovers.map(lbl);
+  return {tracks, checklist};
+}
+let sheetJsPromise = null;
+function loadSheetJs(){
+  if(typeof XLSX !== 'undefined') return Promise.resolve();
+  if(sheetJsPromise) return sheetJsPromise;
+  sheetJsPromise = new Promise((resolve,reject)=>{
+    const sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    sc.onload = ()=>resolve();
+    sc.onerror = ()=>{ sheetJsPromise=null; reject(new Error('Could not load the spreadsheet reader (needs an internet connection).')); };
+    document.head.appendChild(sc);
+  });
+  return sheetJsPromise;
+}
+async function mtLoadFile(input){
+  const f = input.files && input.files[0]; if(!f) return;
+  mt.busy = true; mt.status = 'Reading the spreadsheet…'; mt.sel = null; mt.query = ''; mt.fileName = f.name; render();
+  try{
+    await loadSheetJs();
+    const buf = await f.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
+    const res = parseMasterTrackRows(rows);
+    if(res.error){ mt.data = null; mt.status = res.error; }
+    else { mt.data = res.list; mt.status = `Found ${res.list.length} subdivisions. Type to search, then tap one.`; }
+  }catch(e){
+    mt.data = null; mt.status = 'Could not read that file: ' + ((e && e.message) || e);
+  }
+  mt.busy = false; render();
+}
+function mtExists(name){ return ui.order.some(s=>s.toLowerCase()===name.toLowerCase()) || Object.keys(master).some(s=>s.toLowerCase()===name.toLowerCase() && !master[s]._deleted); }
+function mtSummary(S){
+  const parts = Object.keys(S.tracks).sort((a,b)=>trackRank(a)-trackRank(b));
+  if(S.sidings.length) parts.push(S.sidings.length+' siding'+(S.sidings.length>1?'s':''));
+  if(S.xovers.length) parts.push(S.xovers.length+' xover'+(S.xovers.length>1?'s':''));
+  return parts.join(' · ');
+}
+function mtListHtml(){
+  if(!mt.data) return '';
+  const q = mt.query.trim().toLowerCase();
+  if(!q) return `<div class="seg-list">Start typing a subdivision name…</div>`;
+  const hits = mt.data.map((S,i)=>({S,i})).filter(x=>x.S.name.toLowerCase().includes(q));
+  if(!hits.length) return `<div class="seg-list">No subdivision matches "${escapeHtml(mt.query)}"</div>`;
+  const shown = hits.slice(0,30);
+  return shown.map(({S,i})=>{
+    const have = mtExists(S.name);
+    return `<div class="checklist-item" style="justify-content:space-between;cursor:pointer" onclick="mtSelect(${i})">
+      <span><strong>${escapeHtml(S.name)}</strong> <span class="miles-tag">${escapeHtml(mtSummary(S))}</span></span>
+      ${have?'<span class="chip">already added</span>':''}
+    </div>`;
+  }).join('') + (hits.length>shown.length ? `<div class="seg-list">${hits.length-shown.length} more — keep typing to narrow it down</div>` : '');
+}
+function mtSearch(v){
+  mt.query = v;
+  const el = document.getElementById('mt-list'); if(el) el.innerHTML = mtListHtml();
+}
+function mtSelect(i){ mt.sel = i; render(); }
+function mtPreviewHtml(){
+  if(!mt.data || mt.sel==null || !mt.data[mt.sel]) return '';
+  const S = mt.data[mt.sel];
+  const have = mtExists(S.name);
+  let h = `<div class="card" style="margin:10px 0 0"><div class="subdiv-head"><span class="subdiv-name">${escapeHtml(S.name)}</span>
+    <button class="secondary" style="padding:4px 8px;font-size:11px" onclick="mt.sel=null;render()">Close</button></div>`;
+  Object.keys(S.tracks).sort((a,b)=>trackRank(a)-trackRank(b)).forEach(t=>{
+    const tot = S.tracks[t].reduce((x,[a,b])=>x+(b-a),0);
+    h += `<div class="seg-list"><strong>${escapeHtml(t)}</strong> — ${S.tracks[t].length} segment${S.tracks[t].length>1?'s':''}, ${fmt(tot)} mi</div>`;
+  });
+  if(S.sidings.length) h += `<div class="seg-list"><strong>Sidings</strong> — ${escapeHtml(S.sidings.map(x=>x.name).join(', '))}</div>`;
+  if(S.xovers.length) h += `<div class="seg-list"><strong>Xovers</strong> — ${S.xovers.length} (${escapeHtml(S.xovers.slice(0,6).map(x=>x.name).join(', '))}${S.xovers.length>6?', …':''})${S.badXovers?` · ${S.badXovers} without usable mileposts (added by name only)`:''}</div>`;
+  if(S.skipped) h += `<div class="seg-list">${S.skipped} spur/wye/other row${S.skipped>1?'s':''} not imported.</div>`;
+  h += have
+    ? `<div class="seg-list">⚠️ "${escapeHtml(S.name)}" is already in your app. Delete it first if you want to re-import it.</div>`
+    : `<button onclick="mtAdd()">+ Add ${escapeHtml(S.name)} to my app</button>`;
+  return h + `</div>`;
+}
+async function mtAdd(){
+  if(!mt.data || mt.sel==null) return;
+  const S = mt.data[mt.sel];
+  const name = S.name;
+  if(!name){ toast('This subdivision has no usable name'); return; }
+  if(mtExists(name)){ toast('That subdivision already exists'); return; }
+  const m = mtBuildMaster(S);
+  master[name] = deepCopy(m);
+  const rem = deepCopy(m);
+  rem.checklistDone = {};
+  Object.keys(rem.checklist).forEach(k=>{ rem.checklistDone[k] = rem.checklist[k].map(()=>false); });
+  remaining[name] = rem;
+  await saveMaster(name);
+  await saveRemaining(name);
+  if(!SUBS.includes(name)) SUBS.push(name);
+  if(!ui.order.includes(name)) ui.order.push(name);
+  if(!ui.masterEditOpen) ui.masterEditOpen = {};
+  ui.masterEditOpen[name] = true;
+  await saveUi();
+  mt.sel = null; mt.query = '';
+  toast(`Added ${name} — segments are editable below`);
+  render();
+}
+function masterImportHtml(){
+  let h = `<div class="card" style="margin:12px 0 0"><label>Add a subdivision from the Master tracks list</label>
+    <div class="seg-list">Choose the spreadsheet (.xlsx), search for a subdivision, tap it, and its tracks, sidings and crossovers are added. You can still edit every segment afterwards.</div>
+    <input type="file" accept=".xlsx,.xls,.csv" onchange="mtLoadFile(this)">`;
+  if(mt.status) h += `<div class="seg-list">${escapeHtml(mt.status)}</div>`;
+  if(mt.data){
+    h += `<input id="mt-search" placeholder="Search subdivisions…" value="${escapeHtml(mt.query)}" oninput="mtSearch(this.value)" autocomplete="off">
+    <div id="mt-list">${mtListHtml()}</div>${mtPreviewHtml()}`;
+  }
+  return h + `</div>`;
+}
+
 let pendingDeleteSub = null;
 function confirmDeleteSubdivision(sub){
   if(pendingDeleteSub === sub){
@@ -1419,6 +1618,7 @@ function masterEditHtml(){
     }
     h += `</div>`;
   }
+  h += masterImportHtml();
   h += `<div class="card" style="margin:12px 0 0">
     <label>Add new subdivision</label>
     <input id="me-newsub" placeholder="e.g. Westminster Extension">
