@@ -855,7 +855,13 @@ function buildCopyHtml(rows, titleRow=0, mergeRow=-1){
   html += '</table></body></html>';
   return html;
 }
+// When true, the copy buttons put only plain text on the clipboard, so a normal
+// Ctrl+V pastes straight in (no "paste special" choice). The tab-separated text
+// is the same rows as before, just without the formatted/HTML version. Set to
+// false to go back to the formatted copy (bold subdivision names, merged cells).
+const COPY_AS_PLAIN_TEXT = true;
 function copyRich(text, html){
+  if(COPY_AS_PLAIN_TEXT){ copyText(String(text).split('\n').map(l=>l.replace(/\t+$/,'')).join('\n')); return; }
   if(navigator.clipboard && window.ClipboardItem){
     try{
       const item = new ClipboardItem({
