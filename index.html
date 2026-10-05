@@ -828,14 +828,14 @@ function buildCopyHtml(rows, titleRow=0, mergeRow=-1){
   // shorthand (or per-side "border-top:" shorthand) -- it wants the longhand
   // border-style/border-width/border-color properties spelled out, so every
   // side is listed separately here rather than combined into one value.
-  const border = 'border-style:solid;border-width:1.5pt;border-color:#000000;';
-  const tdAttrs = `border="2" bordercolor="#000000"`;
+  const border = '';  // borders intentionally left out of the copied table
+  const tdAttrs = ``;
   // titleRow/mergeRow can each be a single row index or an array of them --
   // the multi-subdivision export (copyAllRemainingToday) needs one bold/underline
   // title per subdivision and one merged row per summary line, not just one of each.
   const titleRows = new Set(Array.isArray(titleRow) ? titleRow : [titleRow]);
   const mergeRows = new Set(Array.isArray(mergeRow) ? mergeRow : [mergeRow]);
-  let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>table{border-collapse:collapse;} table,td{${border}} td{font-family:Calibri,Arial,sans-serif;font-size:11pt;white-space:nowrap;vertical-align:bottom;text-decoration:none;font-weight:400;}</style></head><body><table border="2" bordercolor="#000000" cellspacing="0" cellpadding="3" rules="all" frame="box" style="border-collapse:collapse;${border}">`;
+  let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><style>table{border-collapse:collapse;} td{font-family:Calibri,Arial,sans-serif;font-size:11pt;white-space:nowrap;vertical-align:bottom;text-decoration:none;font-weight:400;}</style></head><body><table border="0" cellspacing="0" cellpadding="3" style="border-collapse:collapse;">`;
   rows.forEach((row,i)=>{
     html += '<tr>';
     if(mergeRows.has(i)){
@@ -859,7 +859,7 @@ function buildCopyHtml(rows, titleRow=0, mergeRow=-1){
 // Ctrl+V pastes straight in (no "paste special" choice). The tab-separated text
 // is the same rows as before, just without the formatted/HTML version. Set to
 // false to go back to the formatted copy (bold subdivision names, merged cells).
-const COPY_AS_PLAIN_TEXT = true;
+const COPY_AS_PLAIN_TEXT = false;
 function copyRich(text, html){
   if(COPY_AS_PLAIN_TEXT){ copyText(String(text).split('\n').map(l=>l.replace(/\t+$/,'')).join('\n')); return; }
   if(navigator.clipboard && window.ClipboardItem){
