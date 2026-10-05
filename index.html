@@ -1709,8 +1709,7 @@ async function readReport(){
         const st = r2(dir==='U'?end-test:end+test);
         lo=Math.min(st,r2(end)); hi=Math.max(st,r2(end));
       }
-      const clean = String(r.subdivision||'').replace(/[^a-z ]/gi,'').trim().toLowerCase();
-      return {inc:isFinite(lo), sub:SUBS.find(s=>s.toLowerCase()===clean)||'', track:impMapTrack(r), dir, end, test, lo, hi, trk:r.trk||'', name:r.trackName||'', remark:r.remark||''};
+      return {inc:isFinite(lo), sub:findSubByName(r.subdivision), track:impMapTrack(r), dir, end, test, lo, hi, trk:r.trk||'', name:r.trackName||'', remark:r.remark||''};
     });
     imp.total = data.reportTotalTest!=null && data.reportTotalTest!=='' ? parseFloat(data.reportTotalTest) : null;
     imp.status = imp.rows.length ? 'Review below, then log.' : 'No tested rows found — check this is the right report.';
@@ -1763,8 +1762,7 @@ function parsePastedRows(){
       const st = r2(dir==='U'?end-test:end+test);
       lo=Math.min(st,r2(end)); hi=Math.max(st,r2(end));
     }
-    const clean = String(subdivision||'').replace(/[^a-z ]/gi,'').trim().toLowerCase();
-    rows.push({inc:isFinite(lo), sub:SUBS.find(s=>s.toLowerCase()===clean)||'', track:impMapTrack({trackName,remark}), dir, end, test, lo, hi, trk:trk||'', name:trackName||'', remark:remark||''});
+    rows.push({inc:isFinite(lo), sub:findSubByName(subdivision), track:impMapTrack({trackName,remark}), dir, end, test, lo, hi, trk:trk||'', name:trackName||'', remark:remark||''});
   }
   if(!rows.length){ toast('No rows found — check the pasted format'); return; }
   imp.rows = rows; imp.total = isFinite(total)?total:null;
@@ -1773,6 +1771,25 @@ function parsePastedRows(){
 }
 
 // ---- XML daily-report import (deterministic, no AI needed) ----
+// Matches a subdivision name from a report (any case, any punctuation, e.g.
+// "C&M WEST" or "Artesia 222-North") to the app's subdivision list.
+function findSubByName(raw){
+  const norm = x => String(x||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const n = norm(raw);
+  return n ? (SUBS.find(s=>norm(s)===n) || '') : '';
+}
+// The XML tags every movement with the same track-type code the company's
+// Master tracks list uses (MSFX): SI=Main, NT=North, ST=South, DT=North DT,
+// SD=Siding, XOVER=Xover, etc. Far more reliable than reading the remark text.
+// (The code alone says which kind of track, so SHU1 as Main vs North is told
+// apart by MSFX -- no mileposts needed.) Returns '' when the code is missing.
+function xmlTrackFromMsfx(msfx, trackText){
+  const m = String(msfx||'').trim().toUpperCase();
+  if(m==='SD') return 'Siding';
+  if(m==='XOVER') return 'Xover';
+  if(m==='YD') return 'Yard';
+  return mtTrackName(m, trackText) || '';
+}
 function mapXmlTrack(text){
   const t = String(text||'').toUpperCase();
   if(t.includes('SIDING')) return 'Siding';
@@ -1810,8 +1827,7 @@ function parseXmlReport(xmlText){
   const rawRows = [];
   locations.forEach(loc=>{
     const subdivRaw = (loc.querySelector('SUBDIV')?.textContent || '').trim();
-    const clean = subdivRaw.replace(/[^a-z ]/gi,'').trim().toLowerCase();
-    const sub = SUBS.find(s=>s.toLowerCase()===clean) || '';
+    const sub = findSubByName(subdivRaw);
     let prevMp = null, lastTrack = '';
     loc.querySelectorAll('Movements > Movement').forEach(mv=>{
       const trk = (mv.querySelector('TRACKID')?.textContent || '').trim();
@@ -1830,7 +1846,8 @@ function parseXmlReport(xmlText){
           const time = (mv.querySelector('TIME')?.textContent || '').trim();
           const date = (mv.querySelector('DATE')?.textContent || '').trim();
           const text = [trcom, mcom].filter(Boolean).join(' ');
-          let track = mapXmlTrack(text);
+          const msfx = (mv.querySelector('MSFX')?.textContent || '').trim();
+          let track = xmlTrackFromMsfx(msfx, trcom) || mapXmlTrack(text);
           if(track) lastTrack = track; else track = lastTrack;
           const name = track==='Siding' ? xmlSidingName(text) : '';
           const lo = Math.min(prevMp, mp), hi = Math.max(prevMp, mp);
