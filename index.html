@@ -682,7 +682,15 @@ async function undoEntry(id){
   const idx = history.entries.findIndex(e=>e.id===id);
   if(idx===-1) return;
   const e = history.entries[idx];
-  if(!remaining[e.sub]) return;
+  if(!remaining[e.sub]){
+    // The subdivision was deleted after this was logged, so there's no remaining
+    // mileage to put back -- just remove the entry from the list.
+    history.entries.splice(idx,1);
+    await saveHistory();
+    toast(`Removed: ${e.sub} ${e.kind ? e.name : e.track} (${e.sub} is no longer in your list)`);
+    render();
+    return;
+  }
   if(e.kind){
     if(remaining[e.sub].checklistDone && remaining[e.sub].checklistDone[e.kind]){
       remaining[e.sub].checklistDone[e.kind][e.idx] = false;
