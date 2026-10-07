@@ -1013,6 +1013,10 @@ function copyAllRemainingToday(){
     const line = data.suffixLine ? `${sub}: ${data.totalLine} ${data.suffixLine}` : `${sub}: ${data.totalLine}`;
     rows.push([line, '']);
   });
+  // With only one subdivision, leave an empty row between the total line and the
+  // subdivision name so the data lines up with the labels in the sheet to its left
+  // (same layout as the single-subdivision Copy Remaining Miles button).
+  if(datas.length === 1) rows.push(['','']);
   const titleRows = [];
   datas.forEach(({data}, i)=>{
     titleRows.push(rows.length);
