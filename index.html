@@ -952,6 +952,21 @@ function xoverNamesFor(sub, labels, idxs, universe){
   });
   return out;
 }
+// Name shown for a checklist entry in "Recently tested". Each row is one crossover,
+// so a member of an East/West pair is named by direction ("Nepa East") rather than
+// just the shared name.
+function historyItemName(e){
+  if(e.kind==='Xovers' && typeof e.idx==='number'){
+    const labels = (master[e.sub] && master[e.sub].checklist && master[e.sub].checklist.Xovers) || [];
+    const label = labels[e.idx];
+    if(label!=null){
+      const k = xoverKey(e.sub,label);
+      const size = labels.filter(l=>xoverKey(e.sub,l)===k).length;
+      return size>1 ? xoverPartName(e.sub,label) : k;
+    }
+  }
+  return e.name;
+}
 function buildRemainingSegmentData(sub){
   const r = remaining[sub]; if(!r) return null;
   const trackKind = {Siding:'Sidings'};
@@ -2190,7 +2205,7 @@ function render(){
     const mpLabel = e => e.dir==='D' ? `mp${fmt(e.hi)}–${fmt(e.lo)}` : `mp${fmt(e.lo)}–${fmt(e.hi)}`;
     const rowsFor = (list)=> list.length
       ? list.map(e=>`<div class="checklist-item history-row trk-${trackColorClass(e.kind||e.track)}" style="justify-content:space-between">
-          <span>${e.kind ? `${e.sub} · ${e.kind} · ${e.name}` : `${e.sub} · ${e.track} · ${mpLabel(e)}`} <span class="miles-tag">(${timeAgo(e.ts)})</span></span>
+          <span>${e.kind ? `${e.sub} · ${e.kind} · ${historyItemName(e)}` : `${e.sub} · ${e.track} · ${mpLabel(e)}`} <span class="miles-tag">(${timeAgo(e.ts)})</span></span>
           <button class="secondary" style="padding:4px 8px;font-size:11px;flex-shrink:0" onclick="undoEntry('${e.id}')">Undo</button>
         </div>`).join('')
       : `<div class="seg-list">Nothing here</div>`;
