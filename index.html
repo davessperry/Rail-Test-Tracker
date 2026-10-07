@@ -882,7 +882,7 @@ function copyRich(text, html){
 // checklist line. Anything skipped this cycle (Sidings/Xovers/a skippable track
 // like Mission's "Main (occasional)") is left out entirely, not just marked
 // "Not testing this cycle". Shared by the single-subdivision "Copy Remaining
-// Miles" button and the multi-subdivision "Copy Remaining Miles (today's subs)"
+// Miles" button and the multi-subdivision "Copy Remaining Miles (started subs)"
 // button.
 function buildRemainingSegmentData(sub){
   const r = remaining[sub]; if(!r) return null;
@@ -973,12 +973,39 @@ function copySegments(sub){
 // several subdivisions get tested, this copies all of them in one paste --
 // one summary line per subdivision at the top ("Thompson: 51.78 plus sidings"),
 // then each subdivision's full remaining-miles report below, in order.
+// A subdivision counts as "started" once anything has been logged for it in the
+// current cycle (entries from before the last "Reset cycle" don't count).
+function subIsStarted(sub){
+  const r = remaining[sub]; if(!r) return false;
+  const since = r.cycleStart || 0;
+  return history.entries.some(e=>e.sub===sub && (e.ts||0) >= since);
+}
+// True when nothing is left to test on a subdivision: every track that is not
+// skipped this cycle has no remaining intervals and every checklist item is done.
+function subIsComplete(sub){
+  const r = remaining[sub]; if(!r) return false;
+  const trackKind = {Siding:'Sidings'};
+  const ex = kind => !!(r.excluded && r.excluded[kind]);
+  for(const t of Object.keys(r.tracks||{})){
+    if(ex(trackKind[t]||t)) continue;
+    if((r.tracks[t]||[]).length) return false;
+  }
+  for(const k of Object.keys(r.checklist||{})){
+    if(ex(k)) continue;
+    const done = (r.checklistDone&&r.checklistDone[k])||[];
+    if((r.checklist[k]||[]).some((_,i)=>!done[i])) return false;
+  }
+  return true;
+}
 function copyAllRemainingToday(){
+  // A subdivision stays on this list from the day it is first tested until it is
+  // completely finished (no remaining track miles and nothing left on its
+  // sidings/xover checklists), even on days when nothing new is logged for it.
   const todayStr = new Date().toDateString();
-  const subsToday = ui.order.filter(sub=> remaining[sub] && history.entries.some(e=>e.sub===sub && new Date(e.ts).toDateString()===todayStr));
-  if(!subsToday.length){ toast('Nothing tested today'); return; }
+  const subsToday = ui.order.filter(sub=> remaining[sub] && subIsStarted(sub) && (!subIsComplete(sub) || history.entries.some(e=>e.sub===sub && new Date(e.ts).toDateString()===todayStr)));
+  if(!subsToday.length){ toast('No started subdivisions to copy'); return; }
   const datas = subsToday.map(sub=>({sub, data: buildRemainingSegmentData(sub)})).filter(d=>d.data);
-  if(!datas.length){ toast('Nothing tested today'); return; }
+  if(!datas.length){ toast('No started subdivisions to copy'); return; }
   let rows = [];
   const mergeRows = [];
   datas.forEach(({sub,data})=>{
@@ -1066,6 +1093,7 @@ async function resetAll(){
     remaining[sub] = deepCopy(master[sub]);
     remaining[sub].checklistDone = {};
     Object.keys(remaining[sub].checklist||{}).forEach(k=> remaining[sub].checklistDone[k] = (remaining[sub].checklist[k]||[]).map(()=>false));
+    remaining[sub].cycleStart = Date.now();
     await saveRemaining(sub);
   }
   toast('All subdivisions reset');
@@ -1076,6 +1104,7 @@ async function resetCycle(sub){
   remaining[sub] = deepCopy(master[sub]);
   remaining[sub].checklistDone = {};
   Object.keys(remaining[sub].checklist||{}).forEach(k=> remaining[sub].checklistDone[k] = (remaining[sub].checklist[k]||[]).map(()=>false));
+  remaining[sub].cycleStart = Date.now();
   await saveRemaining(sub);
   toast(`${sub} cycle reset`);
   render();
@@ -2048,7 +2077,7 @@ function render(){
   html += `<div class="section-title" style="margin-top:0">Recently tested <span class="chip" style="cursor:pointer" onclick="confirmUndoAllHistory()">${pendingUndoAllHistory?'tap again to confirm':'undo all'}</span></div>
   <div class="card">
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-    <button class="secondary" onclick="copyAllRemainingToday()">Copy Remaining Miles (today's subs)</button>
+    <button class="secondary" onclick="copyAllRemainingToday()">Copy Remaining Miles (started subs)</button>
     <button class="secondary" onclick="copyAllTodaySegments()">Copy Miles Tested Today (today's subs)</button>
   </div>`;
   if(!history.entries.length){
