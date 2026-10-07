@@ -907,14 +907,21 @@ function copyRich(text, html){
 // Crossovers that are tested every single cycle and so must stay on the
 // remaining-miles copy even when the Xovers block is skipped ("Skip" button),
 // keyed by subdivision and matched on the subcode in the crossover's label.
-const ALWAYS_XOVER_CODES = { Thompson: ['XQ72','XQ73'] };  // Nepa East / Nepa West
+const ALWAYS_XOVER_CODES = { Thompson: { XQ72:'Nepa East', XQ73:'Nepa West' } };  // subcode -> name shown in the copy
 // Indexes (into checklist.Xovers) of this subdivision's always-tested crossovers.
 function alwaysXoverIdx(sub){
-  const codes = ALWAYS_XOVER_CODES[sub]; const r = remaining[sub];
+  const r = remaining[sub];
   const out = new Set();
-  if(!codes || !r || !r.checklist || !r.checklist.Xovers) return out;
-  r.checklist.Xovers.forEach((label,i)=>{ if(codes.some(c=>new RegExp('—\\s*'+c+'\\b','i').test(label))) out.add(i); });
+  if(!ALWAYS_XOVER_CODES[sub] || !r || !r.checklist || !r.checklist.Xovers) return out;
+  r.checklist.Xovers.forEach((label,i)=>{ if(alwaysXoverName(sub,label)) out.add(i); });
   return out;
+}
+// The fixed display name (e.g. "Nepa East") if this crossover label is one of the
+// always-tested ones, else ''.
+function alwaysXoverName(sub, label){
+  const map = ALWAYS_XOVER_CODES[sub]; if(!map) return '';
+  for(const c of Object.keys(map)){ if(new RegExp('—\\s*'+c+'\\b','i').test(label)) return map[c]; }
+  return '';
 }
 function buildRemainingSegmentData(sub){
   const r = remaining[sub]; if(!r) return null;
@@ -930,8 +937,8 @@ function buildRemainingSegmentData(sub){
   }, 0);
   const hasSidings = ((r.checklist&&r.checklist.Sidings)||[]).length > 0 && !isExcluded('Sidings');
   const alwaysIdx = alwaysXoverIdx(sub);
-  const alwaysLeft = [...alwaysIdx].some(i=>!((r.checklistDone&&r.checklistDone.Xovers)||[])[i]);
-  const hasXovers = ((r.checklist&&r.checklist.Xovers)||[]).length > 0 && (!isExcluded('Xovers') || alwaysLeft);
+  // (When Xovers is skipped, the always-tested crossovers still get their own line below, but the total line does not say "plus xovers".)
+  const hasXovers = ((r.checklist&&r.checklist.Xovers)||[]).length > 0 && !isExcluded('Xovers');
   let suffixLine = '';
   if(hasSidings && hasXovers) suffixLine = 'plus sidings and xovers';
   else if(hasSidings) suffixLine = 'plus sidings';
@@ -986,7 +993,7 @@ function buildRemainingSegmentData(sub){
       items.forEach((label,i)=>{
         if(done[i]) return;
         if(onlyIdx && !onlyIdx.has(i)) return;
-        const base = xoverBaseName(label);
+        const base = alwaysXoverName(sub,label) || xoverBaseName(label);
         if(!seen.has(base)){ seen.add(base); left.push(base); }
       });
     } else {
