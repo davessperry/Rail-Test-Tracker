@@ -923,6 +923,35 @@ function alwaysXoverName(sub, label){
   for(const c of Object.keys(map)){ if(new RegExp('—\\s*'+c+'\\b','i').test(label)) return map[c]; }
   return '';
 }
+// East/West pairs of crossovers: group key is the shared name ("Moberly"), and a
+// part name adds the direction ("Moberly East") for when only one of the pair is
+// in a given state.
+function xoverKey(sub,label){ return alwaysXoverName(sub,label) || xoverBaseName(label); }
+function xoverDirection(label){
+  const m = stripTrailingRange(label).replace(/\s*—\s*[A-Za-z]{1,3}\d+\s*$/,'').match(/\b(east|west)\b/i);
+  return m ? m[1][0].toUpperCase()+m[1].slice(1).toLowerCase() : '';
+}
+function xoverPartName(sub,label){ const k = xoverKey(sub,label), d = xoverDirection(label); return d ? `${k} ${d}` : k; }
+// idxs: the checklist indexes in some state (remaining, or tested today). Returns display
+// names: the shared name when every member of its pair is in idxs, otherwise each member
+// by direction. `universe` limits which indexes belong to the groups considered.
+function xoverNamesFor(sub, labels, idxs, universe){
+  const groups = new Map();
+  labels.forEach((label,i)=>{
+    if(universe && !universe.has(i)) return;
+    const k = xoverKey(sub,label);
+    if(!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(i);
+  });
+  const out = [];
+  groups.forEach((members,k)=>{
+    const hit = members.filter(i=>idxs.has(i));
+    if(!hit.length) return;
+    if(hit.length===members.length) out.push(k);
+    else hit.forEach(i=>out.push(xoverPartName(sub,labels[i])));
+  });
+  return out;
+}
 function buildRemainingSegmentData(sub){
   const r = remaining[sub]; if(!r) return null;
   const trackKind = {Siding:'Sidings'};
@@ -986,16 +1015,12 @@ function buildRemainingSegmentData(sub){
         return rg ? !sidingIsDone(sub, rg[0], rg[1]) : true;
       }).map(label=> sidingBaseName(label));
     } else if(kind==='Xovers'){
-      // Names only (no mileage/code), and an East/West pair collapses to one name.
+      // Names only (no mileage/code). An East/West pair is one name while both are still
+      // to do; if only one of the pair is left, that one is named by direction.
       const done = r.checklistDone[kind]||[];
-      const seen = new Set();
-      left = [];
-      items.forEach((label,i)=>{
-        if(done[i]) return;
-        if(onlyIdx && !onlyIdx.has(i)) return;
-        const base = alwaysXoverName(sub,label) || xoverBaseName(label);
-        if(!seen.has(base)){ seen.add(base); left.push(base); }
-      });
+      const leftIdx = new Set();
+      items.forEach((label,i)=>{ if(!done[i] && (!onlyIdx || onlyIdx.has(i))) leftIdx.add(i); });
+      left = xoverNamesFor(sub, items, leftIdx, onlyIdx);
     } else {
       const done = r.checklistDone[kind]||[];
       left = items.filter((_,i)=>!done[i]);
@@ -1093,16 +1118,18 @@ function buildTodaySegmentRows(sub){
   entries.forEach(e=>{
     if(e.track) (byTrack[e.track] = byTrack[e.track]||[]).push([e.lo, e.hi]);
     else if(e.kind){
-      // Always-tested crossovers (e.g. Thompson's Nepa East/West) show as one name, even for
-      // entries logged earlier under a longer name.
-      let nm = e.name;
-      if(e.kind==='Xovers' && ALWAYS_XOVER_CODES[sub]){
-        const hit = Object.values(ALWAYS_XOVER_CODES[sub]).find(d=>String(nm||'').toLowerCase().startsWith(d.toLowerCase()));
-        if(hit) nm = hit;
-      }
-      (byKind[e.kind] = byKind[e.kind]||new Set()).add(nm);
+      (byKind[e.kind] = byKind[e.kind]||new Set()).add(e.name);
     }
   });
+  // Crossovers: one name when both of an East/West pair were tested today, otherwise
+  // each tested one by direction. Entries without an index (very old ones) keep their name.
+  if(byKind.Xovers && master[sub] && master[sub].checklist && master[sub].checklist.Xovers){
+    const labels = master[sub].checklist.Xovers;
+    const idxs = new Set(entries.filter(e=>e.kind==='Xovers' && typeof e.idx==='number' && labels[e.idx]!=null).map(e=>e.idx));
+    const names = xoverNamesFor(sub, labels, idxs);
+    entries.filter(e=>e.kind==='Xovers' && !(typeof e.idx==='number' && labels[e.idx]!=null)).forEach(e=>{ if(e.name && !names.includes(e.name)) names.push(e.name); });
+    byKind.Xovers = new Set(names);
+  }
   let rows = [[sub.toUpperCase(), '']];
   Object.keys(byTrack).sort((a,b)=>trackRank(a)-trackRank(b)).forEach(t=>{
     const merged = mergeContiguous(byTrack[t]);
