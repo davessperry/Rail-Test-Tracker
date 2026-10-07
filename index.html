@@ -904,6 +904,18 @@ function copyRich(text, html){
 // "Not testing this cycle". Shared by the single-subdivision "Copy Remaining
 // Miles" button and the multi-subdivision "Copy Remaining Miles (started subs)"
 // button.
+// Crossovers that are tested every single cycle and so must stay on the
+// remaining-miles copy even when the Xovers block is skipped ("Skip" button),
+// keyed by subdivision and matched on the subcode in the crossover's label.
+const ALWAYS_XOVER_CODES = { Thompson: ['XQ72','XQ73'] };  // Nepa East / Nepa West
+// Indexes (into checklist.Xovers) of this subdivision's always-tested crossovers.
+function alwaysXoverIdx(sub){
+  const codes = ALWAYS_XOVER_CODES[sub]; const r = remaining[sub];
+  const out = new Set();
+  if(!codes || !r || !r.checklist || !r.checklist.Xovers) return out;
+  r.checklist.Xovers.forEach((label,i)=>{ if(codes.some(c=>new RegExp('—\\s*'+c+'\\b','i').test(label))) out.add(i); });
+  return out;
+}
 function buildRemainingSegmentData(sub){
   const r = remaining[sub]; if(!r) return null;
   const trackKind = {Siding:'Sidings'};
@@ -917,7 +929,9 @@ function buildRemainingSegmentData(sub){
     return s + totalMiles(r.tracks[t]);
   }, 0);
   const hasSidings = ((r.checklist&&r.checklist.Sidings)||[]).length > 0 && !isExcluded('Sidings');
-  const hasXovers = ((r.checklist&&r.checklist.Xovers)||[]).length > 0 && !isExcluded('Xovers');
+  const alwaysIdx = alwaysXoverIdx(sub);
+  const alwaysLeft = [...alwaysIdx].some(i=>!((r.checklistDone&&r.checklistDone.Xovers)||[])[i]);
+  const hasXovers = ((r.checklist&&r.checklist.Xovers)||[]).length > 0 && (!isExcluded('Xovers') || alwaysLeft);
   let suffixLine = '';
   if(hasSidings && hasXovers) suffixLine = 'plus sidings and xovers';
   else if(hasSidings) suffixLine = 'plus sidings';
@@ -951,7 +965,11 @@ function buildRemainingSegmentData(sub){
   for(const kind of Object.keys(r.checklist||{})){
     const items = r.checklist[kind]||[];
     if(!items.length) continue;
-    if(isExcluded(kind)) continue; // skipped this cycle -- leave it off entirely
+    // Skipped this cycle -- leave it off entirely, except crossovers that are tested every cycle.
+    let onlyIdx = null;
+    if(isExcluded(kind)){
+      if(kind==='Xovers' && alwaysIdx.size) onlyIdx = alwaysIdx; else continue;
+    }
     let left;
     if(kind==='Sidings'){
       // Name only, no mileage -- derived fresh from the actual remaining mileage
@@ -967,6 +985,7 @@ function buildRemainingSegmentData(sub){
       left = [];
       items.forEach((label,i)=>{
         if(done[i]) return;
+        if(onlyIdx && !onlyIdx.has(i)) return;
         const base = xoverBaseName(label);
         if(!seen.has(base)){ seen.add(base); left.push(base); }
       });
@@ -974,6 +993,7 @@ function buildRemainingSegmentData(sub){
       const done = r.checklistDone[kind]||[];
       left = items.filter((_,i)=>!done[i]);
     }
+    if(onlyIdx && !left.length) continue; // skipped block whose always-tested items are already done
     bodyRows.push([kind, left.length ? left.join(', ') : 'Complete']);
   }
   while(bodyRows.length>1 && bodyRows[bodyRows.length-1].every(c=>c==='')) bodyRows.pop();
@@ -1011,8 +1031,11 @@ function subIsComplete(sub){
     if((r.tracks[t]||[]).length) return false;
   }
   for(const k of Object.keys(r.checklist||{})){
-    if(ex(k)) continue;
     const done = (r.checklistDone&&r.checklistDone[k])||[];
+    if(ex(k)){
+      if(k==='Xovers' && [...alwaysXoverIdx(sub)].some(i=>!done[i])) return false;
+      continue;
+    }
     if((r.checklist[k]||[]).some((_,i)=>!done[i])) return false;
   }
   return true;
@@ -2200,13 +2223,18 @@ function render(){
     for(const kind of checklistKinds){
       const items = r.checklist[kind]||[];
       if(!items.length) continue;
-      if(isExcluded(kind)) continue;
+      // A skipped Xovers block still shows the crossovers that are tested every cycle.
+      let onlyIdx = null;
+      if(isExcluded(kind)){
+        if(kind==='Xovers' && alwaysXoverIdx(sub).size) onlyIdx = alwaysXoverIdx(sub); else continue;
+      }
       const isSidings = (kind==='Sidings');
       const done = isSidings ? items.map(label=>{ const rg=parseSidingRange(label); return rg ? sidingIsDone(sub, rg[0], rg[1]) : !!(r.checklistDone[kind]||[])[items.indexOf(label)]; }) : (r.checklistDone[kind]||[]);
       const doneCount = done.filter(Boolean).length;
       const checklistOpen = !!(ui.checklistOpen && ui.checklistOpen[sub] && ui.checklistOpen[sub][kind]);
-      html += `<div class="track-group trk-${trackColorClass(kind)}"><details ${checklistOpen?'open':''} ontoggle="setChecklistOpen('${sub}','${kind}', this.open)"><summary>${kind} (${doneCount}/${items.length} done)${isSidings && r.tracks && r.tracks.Siding ? ` <span class="track-miles" style="float:right;color:var(--ink);font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:14px">${fmt(totalMiles(r.tracks.Siding))} mi</span>` : ''}</summary>`;
+      html += `<div class="track-group trk-${trackColorClass(kind)}"><details ${checklistOpen?'open':''} ontoggle="setChecklistOpen('${sub}','${kind}', this.open)"><summary>${kind}${onlyIdx?' — always tested':''} (${onlyIdx ? [...onlyIdx].filter(i=>done[i]).length+'/'+onlyIdx.size : doneCount+'/'+items.length} done)${isSidings && r.tracks && r.tracks.Siding ? ` <span class="track-miles" style="float:right;color:var(--ink);font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:14px">${fmt(totalMiles(r.tracks.Siding))} mi</span>` : ''}</summary>`;
       items.forEach((name,i)=>{
+        if(onlyIdx && !onlyIdx.has(i)) return;
         const onchange = isSidings ? `toggleSidingDone('${sub}',${i},this.checked)` : `toggleCheck('${sub}','${kind}',${i})`;
         html += `<div class="checklist-item"><input type="checkbox" ${done[i]?'checked':''} onchange="${onchange}"> <span>${name}</span></div>`;
       });
