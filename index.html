@@ -2194,8 +2194,8 @@ function impAddManualRow(){
 function importHtml(){
   let h = `<div class="section-title" style="margin-top:0">Import from daily report <span class="chip">beta</span></div><div class="card">`;
   h += `<label>Daily XML export <span class="chip">exact · no AI needed</span></label>`;
-  h += `<input id="imp-xml-file" type="file" accept=".xml,text/xml,application/xml" onchange="window._impXmlFile=this.files[0]">`;
-  h += `<button onclick="readXmlFile(window._impXmlFile)" ${imp.busy?'disabled':''}>${imp.busy?'Working…':'Read XML report'}</button>`;
+  h += `<input id="imp-xml-file" type="file" accept=".xml,text/xml,application/xml" style="display:none" onchange="const f=this.files[0]; this.value=''; if(f) readXmlFile(f)">`;
+  h += `<button style="width:100%" onclick="document.getElementById('imp-xml-file').click()" ${imp.busy?'disabled':''}>${imp.busy?'Working…':'Choose XML report and import'}</button>`;
   if(imp.status) h += `<div class="seg-list">${escapeHtml(imp.status)}</div>`;
   h += `<details style="margin-top:10px"><summary>Or use a PDF / photo report</summary>
     <div class="seg-list" style="margin-top:8px">Reads the pages with Claude; may not be available in every view.</div>
