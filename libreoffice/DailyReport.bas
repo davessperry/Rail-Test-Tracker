@@ -113,12 +113,13 @@ Function ApplyText(sKind As String, sText As String) As String
   End If
 
   If sKind = "remaining" Then
-    sMsg = WriteBlock(TOTAL_LABEL, REMAINING_LABEL, aSum, nSum, True)
+    sMsg = WriteBlock(TOTAL_LABEL, REMAINING_LABEL, aSum, nSum, True, 0)
     If Left(sMsg, 5) <> "ERROR" Then
-      sMsg = sMsg & Chr(10) & WriteBlock(REMAINING_LABEL, "", aBody, nBody, False)
+      ' leave one empty row under the last remaining-miles item
+      sMsg = sMsg & Chr(10) & WriteBlock(REMAINING_LABEL, "", aBody, nBody, False, 1)
     End If
   Else
-    sMsg = WriteBlock(TESTED_LABEL, "", aBody, nBody, False)
+    sMsg = WriteBlock(TESTED_LABEL, "", aBody, nBody, False, 0)
   End If
   ApplyText = sMsg
 End Function
@@ -189,7 +190,8 @@ End Function
 
 REM Fills one block. sStart = label text the block starts at; sEnd = label text where it
 REM ends ("" = up to the next non-empty cell in column B, or the end of the sheet).
-Function WriteBlock(sStart As String, sEnd As String, aRows() As String, nRows As Long, bMergeAll As Boolean) As String
+REM nPad = number of empty rows to keep free under the last written row.
+Function WriteBlock(sStart As String, sEnd As String, aRows() As String, nRows As Long, bMergeAll As Boolean, nPad As Long) As String
   Dim oSheet As Object, oSheets As Object, nStart As Long, nEnd As Long, nLast As Long
   Dim s As Long, r As Long, nHeight As Long, nExtra As Long, aCells() As String
   Dim oRange As Object, oCell As Object
@@ -226,8 +228,8 @@ Function WriteBlock(sStart As String, sEnd As String, aRows() As String, nRows A
   End If
 
   ' add whole rows if the data does not fit (new rows copy the look of the row above)
-  If nRows > nHeight Then
-    nExtra = nRows - nHeight
+  If nRows + nPad > nHeight Then
+    nExtra = nRows + nPad - nHeight
     oSheet.Rows.insertByIndex(nEnd, nExtra)
     nEnd = nEnd + nExtra
     nHeight = nHeight + nExtra
