@@ -18,3 +18,7 @@ Edit master data > "Add a subdivision from the Master tracks list" lets anyone s
 This repo is a backup and change history for the app's source code. The actual running app lives on Claude's Artifact platform (the "Live app" link above), which also provides the app's data storage (remaining miles, test history, checklist state). Opening `index.html` directly from this repo (e.g. via GitHub Pages) will **not** have working data storage, since that storage is a feature of the Artifact platform, not something built into the file itself.
 
 Changes are made through a Claude conversation and pushed here afterward, so this history reflects what changed and when — independent of any single chat session.
+
+## Send to Excel (optional)
+
+Besides the copy buttons, the "Recently tested" card has **Send Remaining to Excel** and **Send Tested to Excel**. They post the same rows to a private Power Automate link, which runs `excel/FillDailyReport.ts` (an Office Script) in the Daily Report workbook. The script finds the labels in column B and refills the cells to their right, adding rows if needed. Setup steps are in the app under **Excel setup**. The link is stored only in the browser (localStorage) and is never part of this repository.
