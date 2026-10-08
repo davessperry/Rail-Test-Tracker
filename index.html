@@ -1210,13 +1210,11 @@ function downloadOxt(){
   }catch(e){ toast('Could not save the file from here'); }
 }
 function macroSetupHtml(){
-  if(!macroUi.open) return '';
   return `<div style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px">
     <div style="font-weight:600;margin-bottom:6px">Daily report add-on (LibreOffice Calc)</div>
     <div class="seg-list" style="margin-bottom:8px">Daily use (one step): tap <b>Copy Remaining + Tested</b> here, switch to the spreadsheet and choose <b>Daily Report &gt; Fill Report (Remaining + Tested)</b>. It fills both blocks and the number next to "Miles Tested Today:". The two separate items in that menu still work with the two separate copy buttons.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
       <button onclick="downloadOxt()">Download add-on file</button>
-      <button class="secondary" onclick="toggleMacroSetup()">Close</button>
     </div>
     <details><summary>One-time install</summary>
       <ol style="padding-left:18px;font-size:13px;line-height:1.5">
@@ -1812,6 +1810,7 @@ function masterEditHtml(){
       <span class="subdiv-name">${sectionOpen?'▾':'▸'} Edit master data <span class="chip">setup · rarely needed</span></span>
     </div>`;
   if(!sectionOpen){ return h + `</div>`; }
+  h += `<div style="margin-top:12px">${macroSetupHtml()}</div>`;
   for(const sub of ui.order){
     if(!master[sub]) continue;
     const isOpen = !!(ui.masterEditOpen && ui.masterEditOpen[sub]);
@@ -2253,15 +2252,12 @@ function render(){
 
   html += `<div class="section-title" style="margin-top:0">Recently tested <span class="chip" style="cursor:pointer" onclick="confirmUndoAllHistory()">${pendingUndoAllHistory?'tap again to confirm':'undo all'}</span></div>
   <div class="card">
+  <button style="width:100%;margin-bottom:8px" onclick="copyBoth()">Copy Remaining + Tested</button>
+  <div class="seg-list" style="margin:0 0 4px">Or copy just one:</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
     <button class="secondary" onclick="copyAllRemainingToday()">Copy Remaining Miles (started subs)</button>
     <button class="secondary" onclick="copyAllTodaySegments()">Copy Miles Tested Today (today's subs)</button>
-  </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-    <button class="secondary" onclick="copyBoth()">Copy Remaining + Tested</button>
-    <button class="secondary" onclick="toggleMacroSetup()">Spreadsheet macro</button>
-  </div>
-  ${macroSetupHtml()}`;
+  </div>`;
   if(!history.entries.length){
     html += `<div class="seg-list">Nothing logged yet</div>`;
   } else {
