@@ -19,6 +19,6 @@ This repo is a backup and change history for the app's source code. The actual r
 
 Changes are made through a Claude conversation and pushed here afterward, so this history reflects what changed and when — independent of any single chat session.
 
-## Daily report macro (optional)
+## Daily report add-on (optional)
 
-`libreoffice/DailyReport.bas` is a LibreOffice Calc macro. After tapping **Copy Remaining Miles** or **Copy Miles Tested Today** in the app, run `FillRemaining` or `FillTested` in the spreadsheet: it reads the clipboard, finds the labels in column B, and refills the cells to their right (adding rows if needed). The same macro text, plus setup steps, is in the app under **Spreadsheet macro**.
+`libreoffice/DailyReport.bas` is a LibreOffice Calc macro. `libreoffice/DailyReport.oxt` packages it as an extension (rebuild with `python3 libreoffice/build_oxt.py`); installing it adds a **Daily Report** menu to Calc. After tapping **Copy Remaining Miles** or **Copy Miles Tested Today** in the app, choose the matching item: it reads the clipboard, finds the labels in column B, and refills the cells to their right (adding rows if needed). The install steps and the .oxt download are in the app under **Spreadsheet macro**.
