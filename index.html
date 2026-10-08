@@ -90,6 +90,10 @@ label{font-size:12px;color:var(--sub);display:block;margin-bottom:2px;}
 .toast.show{opacity:1;}
 details summary{cursor:pointer;font-size:13px;color:var(--rail);margin-top:4px;}
 .track-group details summary{color:var(--trk);font-weight:500;}
+.hist-sub{border:1px solid var(--line);border-radius:8px;margin:8px 0;overflow:hidden}
+.hist-title{font-weight:700;text-decoration:underline;padding:5px 8px}
+.hist-line{display:grid;grid-template-columns:minmax(64px,auto) 1fr auto;gap:8px;align-items:center;padding:4px 8px;border-top:1px solid var(--line);font-size:14px}
+.hist-r{word-break:break-word}
 </style>
 </head>
 <body>
@@ -2269,12 +2273,24 @@ function render(){
     // "D" (decreasing-mileage) test shows mp high-to-low to match the report --
     // entries with no known direction (manual log, checkbox) keep low-to-high.
     const mpLabel = e => e.dir==='D' ? `mp${fmt(e.hi)}–${fmt(e.lo)}` : `mp${fmt(e.lo)}–${fmt(e.hi)}`;
-    const rowsFor = (list)=> list.length
-      ? list.map(e=>`<div class="checklist-item history-row trk-${trackColorClass(e.kind||e.track)}" style="justify-content:space-between">
-          <span>${e.kind ? `${e.sub} · ${e.kind} · ${historyItemName(e)}` : `${e.sub} · ${e.track} · ${mpLabel(e)}`} <span class="miles-tag">(${timeAgo(e.ts)})</span></span>
-          <button class="secondary" style="padding:4px 8px;font-size:11px;flex-shrink:0" onclick="undoEntry('${e.id}')">Undo</button>
-        </div>`).join('')
-      : `<div class="seg-list">Nothing here</div>`;
+    const rowsFor = (list)=>{
+      if(!list.length) return `<div class="seg-list">Nothing here</div>`;
+      const subsInList = Array.from(new Set(list.map(e=>e.sub)));
+      const ord = x=>{ const i = ui.order.indexOf(x); return i<0 ? 999 : i; };
+      subsInList.sort((x,y)=>ord(x)-ord(y));
+      return subsInList.map(sub=>{
+        const rows = list.filter(e=>e.sub===sub).map(e=>{
+          const left = e.kind ? e.kind : e.track;
+          const right = e.kind ? historyItemName(e) : mpLabel(e);
+          return `<div class="hist-line trk-${trackColorClass(e.kind||e.track)}">
+            <span class="hist-l">${escapeHtml(String(left))}</span>
+            <span class="hist-r">${escapeHtml(String(right))} <span class="miles-tag">(${timeAgo(e.ts)})</span></span>
+            <button class="secondary" style="padding:3px 7px;font-size:11px" onclick="undoEntry('${e.id}')">Undo</button>
+          </div>`;
+        }).join('');
+        return `<div class="hist-sub"><div class="hist-title">${escapeHtml(String(sub).toUpperCase())}</div>${rows}</div>`;
+      }).join('');
+    };
     const todayOpen = ui.historyOpen ? ui.historyOpen.today !== false : true;
     const earlierOpen = ui.historyOpen ? !!ui.historyOpen.earlier : false;
     html += `<details ${todayOpen?'open':''} ontoggle="setHistoryOpen('today', this.open)"><summary>Today (${todayEntries.length}) · <strong>${fmt(todayMilesTested())} mi tested</strong></summary>${rowsFor(todayEntries)}</details>`;
