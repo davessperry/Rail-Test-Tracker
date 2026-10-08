@@ -1,6 +1,7 @@
 REM Rail Test Tracker -> Daily Report (LibreOffice Calc macro)
 REM In the app, tap "Copy Remaining Miles" or "Copy Miles Tested Today", switch to the
-REM spreadsheet and run FillRemaining or FillTested. The macro reads what is on the
+REM spreadsheet and run FillRemaining or FillTested (or tap "Copy Remaining + Tested" and
+REM run FillBoth to do both blocks and the total miles tested in one step). The macro reads what is on the
 REM clipboard, finds the label cells in column B, clears the old data to their right
 REM (columns C and D), writes the new data, and adds rows when it does not fit.
 REM Nothing is deleted from column B or from any other column.
@@ -14,6 +15,7 @@ Const MAX_BLOCK_ROWS = 80  ' safety stop: never clear more rows than this
 Const TOTAL_LABEL = "total miles left"
 Const REMAINING_LABEL = "range of miles left"
 Const TESTED_LABEL = "range of miles tested"
+Const MILES_LABEL = "miles tested today"   ' must match the whole label (ignoring the colon)
 
 Sub FillRemaining
   Show ApplyText("remaining", GetClipboardText())
@@ -21,6 +23,10 @@ End Sub
 
 Sub FillTested
   Show ApplyText("tested", GetClipboardText())
+End Sub
+
+Sub FillBoth
+  Show ApplyBoth(GetClipboardText())
 End Sub
 
 Sub Show(sMsg As String)
@@ -52,19 +58,15 @@ Function GetClipboardText() As String
   Next i
 End Function
 
-REM Works out the pieces from the copied text and writes them into the sheet.
-REM Returns a short message (shown to the user by the macros above).
-Function ApplyText(sKind As String, sText As String) As String
-  Dim aLines() As String, aSum() As String, aBody() As String
-  Dim nSum As Long, nBody As Long, i As Long, k As Long
-  Dim sLine As String, sMsg As String, bHasBracket As Boolean
-
-  If Len(Trim(sText)) = 0 Then
-    ApplyText = "NOTE: The clipboard is empty. Tap a Copy button in the app first."
-    Exit Function
-  End If
+REM Splits copied text into the total lines (aSum) and the body lines (aBody).
+Sub ParseLines(sText As String, aSum() As String, nSum As Long, aBody() As String, nBody As Long, bBracket As Boolean)
+  Dim aLines() As String, i As Long, k As Long
+  nSum = 0: nBody = 0: bBracket = False
+  ReDim aSum(0)
+  ReDim aBody(0)
   sText = Replace(sText, Chr(13) & Chr(10), Chr(10))
   sText = Replace(sText, Chr(13), Chr(10))
+  If Len(Replace(Replace(sText, Chr(9), ""), Chr(10), "")) = 0 Then Exit Sub
   aLines = Split(sText, Chr(10))
   ' drop trailing empty lines
   k = UBound(aLines)
@@ -72,14 +74,9 @@ Function ApplyText(sKind As String, sText As String) As String
     If Len(Replace(aLines(k), Chr(9), "")) > 0 Then Exit Do
     k = k - 1
   Loop
-  If k < 0 Then
-    ApplyText = "NOTE: The clipboard has nothing to write."
-    Exit Function
-  End If
-
+  If k < 0 Then Exit Sub
   ReDim aSum(k)
   ReDim aBody(k)
-  nSum = 0: nBody = 0
   i = 0
   ' leading "Name: total plus ..." lines are the total lines
   Do While i <= k
@@ -99,29 +96,117 @@ Function ApplyText(sKind As String, sText As String) As String
   Loop
   For i = i To k
     aBody(nBody) = aLines(i): nBody = nBody + 1
-    If InStr(aLines(i), "[") > 0 Then bHasBracket = True
+    If InStr(aLines(i), "[") > 0 Then bBracket = True
   Next i
+End Sub
 
+Function WriteRemaining(aSum() As String, nSum As Long, aBody() As String, nBody As Long) As String
+  Dim sMsg As String
+  sMsg = WriteBlock(TOTAL_LABEL, REMAINING_LABEL, aSum, nSum, True, 0)
+  If Left(sMsg, 5) <> "ERROR" Then
+    ' leave one empty row under the last remaining-miles item
+    sMsg = sMsg & Chr(10) & WriteBlock(REMAINING_LABEL, "", aBody, nBody, False, 1)
+  End If
+  WriteRemaining = sMsg
+End Function
+
+REM Handles one kind of copied data ("remaining" or "tested") and writes it to the sheet.
+REM Returns a short message (shown to the user by the macros above).
+Function ApplyText(sKind As String, sText As String) As String
+  Dim aSum() As String, aBody() As String, nSum As Long, nBody As Long, bBracket As Boolean
+  If Len(Trim(sText)) = 0 Then
+    ApplyText = "NOTE: The clipboard is empty. Tap a Copy button in the app first."
+    Exit Function
+  End If
+  ParseLines sText, aSum, nSum, aBody, nBody, bBracket
+  If nSum = 0 And nBody = 0 Then
+    ApplyText = "NOTE: The clipboard has nothing to write."
+    Exit Function
+  End If
   ' guard against sending the wrong kind of data to the wrong block
-  If sKind = "remaining" And nSum = 0 And Not bHasBracket Then
+  If sKind = "remaining" And nSum = 0 And Not bBracket Then
     ApplyText = "NOTE: That does not look like Remaining Miles data. Tap 'Copy Remaining Miles' in the app first."
     Exit Function
   End If
-  If sKind = "tested" And (nSum > 0 Or bHasBracket) Then
+  If sKind = "tested" And (nSum > 0 Or bBracket) Then
     ApplyText = "NOTE: That looks like Remaining Miles data. Tap 'Copy Miles Tested Today' in the app first."
     Exit Function
   End If
-
   If sKind = "remaining" Then
-    sMsg = WriteBlock(TOTAL_LABEL, REMAINING_LABEL, aSum, nSum, True, 0)
-    If Left(sMsg, 5) <> "ERROR" Then
-      ' leave one empty row under the last remaining-miles item
-      sMsg = sMsg & Chr(10) & WriteBlock(REMAINING_LABEL, "", aBody, nBody, False, 1)
-    End If
+    ApplyText = WriteRemaining(aSum, nSum, aBody, nBody)
   Else
-    sMsg = WriteBlock(TESTED_LABEL, "", aBody, nBody, False, 0)
+    ApplyText = WriteBlock(TESTED_LABEL, "", aBody, nBody, False, 0)
   End If
-  ApplyText = sMsg
+End Function
+
+REM Handles the combined copy ("Copy Remaining + Tested" in the app): remaining block,
+REM tested block and the total miles tested today, all in one go. A section that is empty
+REM in the app clears its block in the sheet.
+Function ApplyBoth(sText As String) As String
+  Dim aL() As String, i As Long, sec As String, sRem As String, sTes As String, sMiles As String
+  Dim aSum() As String, aBody() As String, nSum As Long, nBody As Long, bBracket As Boolean
+  Dim bOk As Boolean, sMsg As String, sPart As String
+  sText = Replace(sText, Chr(13) & Chr(10), Chr(10))
+  sText = Replace(sText, Chr(13), Chr(10))
+  aL = Split(sText, Chr(10))
+  sec = "": bOk = False
+  For i = 0 To UBound(aL)
+    Select Case Trim(aL(i))
+      Case "#RTT-BOTH"
+        bOk = True
+      Case "#REMAINING"
+        sec = "R"
+      Case "#TESTED"
+        sec = "T"
+      Case "#MILES"
+        sec = "M"
+      Case "#END"
+        sec = ""
+      Case Else
+        If sec = "R" Then sRem = sRem & aL(i) & Chr(10)
+        If sec = "T" Then sTes = sTes & aL(i) & Chr(10)
+        If sec = "M" Then sMiles = sMiles & Trim(aL(i))
+    End Select
+  Next i
+  If Not bOk Then
+    ApplyBoth = "NOTE: That is not the combined data. Tap 'Copy Remaining + Tested' in the app first."
+    Exit Function
+  End If
+
+  ParseLines sRem, aSum, nSum, aBody, nBody, bBracket
+  sMsg = WriteRemaining(aSum, nSum, aBody, nBody)
+  If Left(sMsg, 5) = "ERROR" Then
+    ApplyBoth = sMsg
+    Exit Function
+  End If
+  ParseLines sTes, aSum, nSum, aBody, nBody, bBracket
+  sPart = WriteBlock(TESTED_LABEL, "", aBody, nBody, False, 0)
+  sMsg = sMsg & Chr(10) & sPart
+  If Len(sMiles) > 0 Then sMsg = sMsg & Chr(10) & SetMiles(sMiles)
+  ApplyBoth = sMsg
+End Function
+
+REM Puts the total miles tested today in the cell to the right of the "Miles Tested Today:" label.
+Function SetMiles(sVal As String) As String
+  Dim oSheets As Object, oSheet As Object, s As Long, r As Long, nLast As Long, nRow As Long
+  oSheets = ThisComponent.Sheets
+  nRow = -1
+  For s = 0 To oSheets.Count - 1
+    oSheet = oSheets.getByIndex(s)
+    nLast = LastUsedRow(oSheet)
+    For r = 0 To nLast
+      If NormText(oSheet.getCellByPosition(LABEL_COL, r).String) = MILES_LABEL Then
+        nRow = r: Exit For
+      End If
+    Next r
+    If nRow >= 0 Then Exit For
+  Next s
+  If nRow < 0 Then
+    SetMiles = "ERROR: could not find the 'Miles Tested Today:' label in column B."
+    Exit Function
+  End If
+  oSheet.getCellByPosition(DATA_COL, nRow).Value = Val(sVal)
+  SetMiles = "Set miles tested today to " & sVal & " (row " & (nRow + 1) & ")."
 End Function
 
 REM A total line looks like "Cascade: 94.3 plus sidings" with nothing in the 2nd column.

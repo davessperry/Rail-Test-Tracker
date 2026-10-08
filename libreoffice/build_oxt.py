@@ -46,7 +46,7 @@ addons = ('<?xml version="1.0" encoding="UTF-8"?>\n'
  '    <prop oor:name="Target" oor:type="xs:string"><value>_self</value></prop>\n'
  '    <prop oor:name="Context" oor:type="xs:string"><value>com.sun.star.sheet.SpreadsheetDocument</value></prop>\n'
  '    <node oor:name="Submenu">\n'
- + item('m1', 'Fill Remaining Miles', 'FillRemaining') + item('m2', 'Fill Miles Tested Today', 'FillTested') +
+ + item('m1', 'Fill Report (Remaining + Tested)', 'FillBoth') + item('m2', 'Fill Remaining Miles', 'FillRemaining') + item('m3', 'Fill Miles Tested Today', 'FillTested') +
  '    </node>\n'
  '   </node>\n'
  '  </node>\n'
