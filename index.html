@@ -1363,11 +1363,7 @@ function toggleMasterSection(){
   saveUi();
   render();
 }
-function toggleLogSection(){
-  ui.logSectionOpen = !ui.logSectionOpen;
-  saveUi();
-  render();
-}
+function setLogOpen(isOpen){ ui.logSectionOpen = isOpen; saveUi(); }
 
 // diff oldRange -> newRange and apply the change to a track's remaining intervals:
 // pieces of oldRange no longer covered by newRange are removed from remaining,
@@ -2196,11 +2192,20 @@ function impAddManualRow(){
   render();
 }
 function importHtml(){
-  let h = `<div class="section-title" style="margin-top:0">Import from daily report <span class="chip">beta</span></div><div class="card">`;
+  let h = `<div class="section-title" style="margin-top:0">Log tested miles <span class="chip">import report or enter by hand</span></div><div class="card">`;
   h += `<label>Daily XML export <span class="chip">exact · no AI needed</span></label>`;
   h += `<input id="imp-xml-file" type="file" accept=".xml,text/xml,application/xml" style="display:none" onchange="const f=this.files[0]; this.value=''; if(f) readXmlFile(f)">`;
   h += `<button style="width:100%" onclick="document.getElementById('imp-xml-file').click()" ${imp.busy?'disabled':''}>${imp.busy?'Working…':'Choose XML report and import'}</button>`;
   if(imp.status) h += `<div class="seg-list">${escapeHtml(imp.status)}</div>`;
+  const logOpen = !!ui.logSectionOpen;
+  h += `<details style="margin-top:10px" ${logOpen?'open':''} ontoggle="setLogOpen(this.open)"><summary>Or enter a range by hand</summary>
+    <div class="seg-list" style="margin-top:8px">Pick the subdivision and track, then the starting and ending mile post of what you tested.</div>
+    <label>Subdivision</label><select id="sel-sub" onchange="updateLogTrackOptions()">${SUBS.map(s=>`<option value="${s}" ${s===ui.lastSub?'selected':''}>${s}</option>`).join('')}</select>
+    <label>Track</label><select id="sel-track">${(()=>{ const opts = existingTrackOptionsFor(ui.lastSub||SUBS[0]); return opts.length ? opts.map(t=>`<option ${t===ui.lastTrack?'selected':''}>${t}</option>`).join('') : `<option value="">No tracks set up yet</option>`; })()}</select>
+    <div class="row"><div><label>From MP</label><input id="in-from" type="number" step="0.01"></div>
+    <div><label>To MP</label><input id="in-to" type="number" step="0.01"></div></div>
+    <button onclick="logTested()">Log tested range</button>
+  </details>`;
   h += `<details style="margin-top:10px"><summary>Or use a PDF / photo report</summary>
     <div class="seg-list" style="margin-top:8px">Reads the pages with Claude; may not be available in every view.</div>
     <label style="margin-top:6px">Report PDF or photos</label>
@@ -2237,20 +2242,6 @@ function importHtml(){
 
 function render(){
   let html = `<h1>Rail Test Tracker</h1><div class="sub">Miles remaining to test, by subdivision</div>`;
-
-  const logSectionOpen = !!ui.logSectionOpen;
-  html += `<div class="card">
-    <div class="subdiv-head" onclick="toggleLogSection()" style="cursor:pointer">
-      <span class="subdiv-name">${logSectionOpen?'▾':'▸'} Log tested miles</span>
-    </div>`;
-  if(logSectionOpen){
-    html += `<label>Subdivision</label><select id="sel-sub" onchange="updateLogTrackOptions()">${SUBS.map(s=>`<option value="${s}" ${s===ui.lastSub?'selected':''}>${s}</option>`).join('')}</select>
-    <label>Track</label><select id="sel-track">${(()=>{ const opts = existingTrackOptionsFor(ui.lastSub||SUBS[0]); return opts.length ? opts.map(t=>`<option ${t===ui.lastTrack?'selected':''}>${t}</option>`).join('') : `<option value="">No tracks set up yet</option>`; })()}</select>
-    <div class="row"><div><label>From MP</label><input id="in-from" type="number" step="0.01"></div>
-    <div><label>To MP</label><input id="in-to" type="number" step="0.01"></div></div>
-    <button onclick="logTested()">Log tested range</button>`;
-  }
-  html += `</div>`;
 
   html += importHtml();
 
