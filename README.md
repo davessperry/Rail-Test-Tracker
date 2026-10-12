@@ -22,3 +22,6 @@ Changes are made through a Claude conversation and pushed here afterward, so thi
 ## Daily report add-on (optional)
 
 `libreoffice/DailyReport.bas` is a LibreOffice Calc macro. `libreoffice/DailyReport.oxt` packages it as an extension (rebuild with `python3 libreoffice/build_oxt.py`); installing it adds a **Daily Report** menu to Calc. Tap **Copy Remaining + Tested** in the app and choose **Daily Report > Fill Report (Remaining + Tested)**: it fills both blocks and the "Miles Tested Today:" number in one step. (The older pairs, **Copy Remaining Miles** / **Copy Miles Tested Today** with their own menu items, still work.) The add-on reads the clipboard, finds the labels in column B, and refills the cells to their right (adding rows if needed). The install steps and the .oxt download are in the app under **Spreadsheet macro**.
+
+
+The combined copy also carries the truck number (set under Edit master data) and today's date; the add-on writes it, e.g. "SRS 864 10/12/2026", into the merged cell C3:D3.

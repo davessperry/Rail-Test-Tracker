@@ -143,7 +143,7 @@ REM Handles the combined copy ("Copy Remaining + Tested" in the app): remaining 
 REM tested block and the total miles tested today, all in one go. A section that is empty
 REM in the app clears its block in the sheet.
 Function ApplyBoth(sText As String) As String
-  Dim aL() As String, i As Long, sec As String, sRem As String, sTes As String, sMiles As String
+  Dim aL() As String, i As Long, sec As String, sRem As String, sTes As String, sMiles As String, sHead As String
   Dim aSum() As String, aBody() As String, nSum As Long, nBody As Long, bBracket As Boolean
   Dim bOk As Boolean, sMsg As String, sPart As String
   sText = Replace(sText, Chr(13) & Chr(10), Chr(10))
@@ -160,9 +160,12 @@ Function ApplyBoth(sText As String) As String
         sec = "T"
       Case "#MILES"
         sec = "M"
+      Case "#TRUCK"
+        sec = "K"
       Case "#END"
         sec = ""
       Case Else
+        If sec = "K" Then sHead = sHead & Trim(aL(i))
         If sec = "R" Then sRem = sRem & aL(i) & Chr(10)
         If sec = "T" Then sTes = sTes & aL(i) & Chr(10)
         If sec = "M" Then sMiles = sMiles & Trim(aL(i))
@@ -183,7 +186,21 @@ Function ApplyBoth(sText As String) As String
   sPart = WriteBlock(TESTED_LABEL, "", aBody, nBody, False, 0)
   sMsg = sMsg & Chr(10) & sPart
   If Len(sMiles) > 0 Then sMsg = sMsg & Chr(10) & SetMiles(sMiles)
+  If Len(sHead) > 0 Then sMsg = sMsg & Chr(10) & SetHeader(sHead)
   ApplyBoth = sMsg
+End Function
+
+REM Puts the truck number and date (e.g. "SRS 864 10/12/2026") in the merged cell C3:D3 of the
+REM sheet that is showing. Rows inserted lower down never move this cell.
+Function SetHeader(sVal As String) As String
+  Dim oSheet As Object, oRange As Object
+  oSheet = ThisComponent.CurrentController.ActiveSheet
+  oRange = oSheet.getCellRangeByPosition(2, 2, 3, 2)
+  oRange.merge(False)
+  oSheet.getCellByPosition(3, 2).String = ""
+  oSheet.getCellByPosition(2, 2).String = sVal
+  oRange.merge(True)
+  SetHeader = "Set C3:D3 to '" & sVal & "'."
 End Function
 
 REM Puts the total miles tested today in the cell to the right of the "Miles Tested Today:" label.
