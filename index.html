@@ -1079,12 +1079,21 @@ function subIsComplete(sub){
   const ex = kind => !!(r.excluded && r.excluded[kind]);
   for(const t of Object.keys(r.tracks||{})){
     if(ex(trackKind[t]||t)) continue;
+    // Crossover mileage is covered by the Xovers checklist below (which also honours "skip").
+    if(t==='Xover' && ((r.checklist&&r.checklist.Xovers)||[]).length) continue;
     if((r.tracks[t]||[]).length) return false;
   }
   for(const k of Object.keys(r.checklist||{})){
     const done = (r.checklistDone&&r.checklistDone[k])||[];
     if(ex(k)){
       if(k==='Xovers' && [...alwaysXoverIdx(sub)].some(i=>!done[i])) return false;
+      continue;
+    }
+    // Sidings are done when their mileage has been tested (same test the card uses),
+    // not only when the checkbox was ticked -- XML imports log mileage, not checkboxes.
+    if(k==='Sidings'){
+      const bad = (r.checklist[k]||[]).some((label,i)=>{ const rg=parseSidingRange(label); return rg ? !sidingIsDone(sub, rg[0], rg[1]) : !done[i]; });
+      if(bad) return false;
       continue;
     }
     if((r.checklist[k]||[]).some((_,i)=>!done[i])) return false;
