@@ -2281,7 +2281,8 @@ function render(){
     // "D" (decreasing-mileage) test shows mp high-to-low to match the report --
     // entries with no known direction (manual log, checkbox) keep low-to-high.
     const mpLabel = e => e.dir==='D' ? `mp${fmt(e.hi)}–${fmt(e.lo)}` : `mp${fmt(e.lo)}–${fmt(e.hi)}`;
-    const rowsFor = (list)=>{
+    const shortDate = ts=>{ const d=new Date(ts); return `${d.getMonth()+1}/${d.getDate()}/${String(d.getFullYear()).slice(-2)}`; };
+    const rowsFor = (list, useDate)=>{
       if(!list.length) return `<div class="seg-list">Nothing here</div>`;
       const subsInList = Array.from(new Set(list.map(e=>e.sub)));
       const ord = x=>{ const i = ui.order.indexOf(x); return i<0 ? 999 : i; };
@@ -2292,7 +2293,7 @@ function render(){
           const right = e.kind ? historyItemName(e) : mpLabel(e);
           return `<div class="hist-line trk-${trackColorClass(e.kind||e.track)}">
             <span class="hist-l">${escapeHtml(String(left))}</span>
-            <span class="hist-r">${escapeHtml(String(right))} <span class="miles-tag">(${timeAgo(e.ts)})</span></span>
+            <span class="hist-r">${escapeHtml(String(right))} <span class="miles-tag">(${useDate ? shortDate(e.ts) : timeAgo(e.ts)})</span></span>
             <button class="secondary" style="padding:3px 7px;font-size:11px" onclick="undoEntry('${e.id}')">Undo</button>
           </div>`;
         }).join('');
@@ -2302,7 +2303,7 @@ function render(){
     const todayOpen = ui.historyOpen ? ui.historyOpen.today !== false : true;
     const earlierOpen = ui.historyOpen ? !!ui.historyOpen.earlier : false;
     html += `<details ${todayOpen?'open':''} ontoggle="setHistoryOpen('today', this.open)"><summary>Today (${todayEntries.length}) · <strong>${fmt(todayMilesTested())} mi tested</strong></summary>${rowsFor(todayEntries)}</details>`;
-    html += `<details ${earlierOpen?'open':''} ontoggle="setHistoryOpen('earlier', this.open)"><summary>Earlier (${earlierEntries.length})</summary>${rowsFor(earlierEntries)}</details>`;
+    html += `<details ${earlierOpen?'open':''} ontoggle="setHistoryOpen('earlier', this.open)"><summary>Earlier (${earlierEntries.length})</summary>${rowsFor(earlierEntries, true)}</details>`;
   }
   html += `</div>`;
 
