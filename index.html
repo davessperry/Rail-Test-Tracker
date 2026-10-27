@@ -598,6 +598,24 @@ async function init(){
   // left over from before pushHistoryMerged existed, or from two tabs logging at
   // once. Only writes back if something actually changed.
   if(dedupeHistoryEntries()) await saveHistory();
+  // One-time repair: crossovers tested through an XML import were logged as Xover mileage but
+  // never ticked on the Xovers checklist, so they stayed "remaining". Tick any crossover whose
+  // range was imported since the subdivision's cycle started (flag _xoverImportV1).
+  for(const sub of ui.order){
+    const r = remaining[sub], m = master[sub];
+    if(!r || !m || !m.checklist || !(m.checklist.Xovers||[]).length || r._xoverImportV1) continue;
+    const since = r.cycleStart || 0;
+    let changed = false;
+    history.entries.filter(e=>e.sub===sub && e.track==='Xover' && (e.ts||0)>=since && isFinite(e.lo) && isFinite(e.hi)).forEach(e=>{
+      xoverItemsInRange(sub, e.lo, e.hi).forEach(i=>{
+        if(!r.checklistDone) r.checklistDone = {};
+        if(!r.checklistDone.Xovers) r.checklistDone.Xovers = [];
+        if(!r.checklistDone.Xovers[i]){ r.checklistDone.Xovers[i] = true; changed = true; }
+      });
+    });
+    r._xoverImportV1 = true;
+    await saveRemaining(sub);
+  }
   render();
 }
 // Collapses history entries that are mileage ranges (sub+track+lo+hi, no `kind`)
@@ -1994,11 +2012,40 @@ async function readReport(){
   imp.files = []; // done with the picked file(s) -- drop the reference now that they're read
   imp.busy=false; render();
 }
+// Crossover rows from a report are logged as Xover mileage, but the Xovers checklist is what
+// drives "done" for a crossover. Returns the checklist indexes whose crossover falls inside
+// the tested range [lo,hi] (a small tolerance either side, matched on the item's midpoint).
+function xoverItemsInRange(sub, lo, hi){
+  const labels = (master[sub] && master[sub].checklist && master[sub].checklist.Xovers) || [];
+  const tol = 0.05, out = [];
+  labels.forEach((label,i)=>{
+    const rg = parseTrailingRange(label); if(!rg) return;
+    const mid = (rg[0]+rg[1])/2;
+    if(mid >= lo-tol && mid <= hi+tol) out.push(i);
+  });
+  return out;
+}
 async function importLog(){
   const sel = imp.rows.filter(r=>r.inc && r.sub && r.track && isFinite(r.lo) && remaining[r.sub]);
   if(!sel.length){ toast('Nothing to log'); return; }
   const touched = new Set();
   for(const r of sel){
+    if(r.track==='Xover'){
+      const idxs = xoverItemsInRange(r.sub, r.lo, r.hi);
+      if(idxs.length){
+        const rem = remaining[r.sub];
+        if(!rem.checklistDone) rem.checklistDone = {};
+        if(!rem.checklistDone.Xovers) rem.checklistDone.Xovers = [];
+        for(const i of idxs){
+          if(rem.checklistDone.Xovers[i]) continue;
+          rem.checklistDone.Xovers[i] = true;
+          const label = master[r.sub].checklist.Xovers[i];
+          await pushHistory({sub:r.sub, kind:'Xovers', idx:i, name:(alwaysXoverName(r.sub,label) || xoverBaseName(label)), type:'import', ts:r.ts||null});
+        }
+        touched.add(r.sub);
+        continue;
+      }
+    }
     if(!remaining[r.sub].tracks[r.track]) remaining[r.sub].tracks[r.track]=[];
     remaining[r.sub].tracks[r.track] = subtractInterval(remaining[r.sub].tracks[r.track]||[], [r.lo,r.hi]);
     touched.add(r.sub);
