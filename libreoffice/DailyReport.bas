@@ -357,5 +357,30 @@ Function WriteBlock(sStart As String, sEnd As String, aRows() As String, nRows A
       oCell.CharUnderline = 1            ' single
     End If
   Next r
+  NormalizeBorders oSheet, nStart, nEnd - 1
   WriteBlock = "Wrote " & nRows & " rows next to '" & sStart & "' (row " & (nStart + 1) & ")."
 End Function
+
+REM Rows inserted into the block copy the look of the row above, so heavy lines can pile up
+REM between the rows over time. Inside the block, any heavy horizontal line (columns A-D)
+REM is set back to a thin line. The top of the first row and the bottom of the last row
+REM (the frame around the block) are left exactly as they are.
+Sub NormalizeBorders(oSheet As Object, nFirst As Long, nLast As Long)
+  Dim r As Long, c As Long, b As Object, oCell As Object
+  For r = nFirst To nLast - 1
+    For c = 0 To 3
+      oCell = oSheet.getCellByPosition(c, r)
+      b = oCell.BottomBorder
+      If b.OuterLineWidth + b.InnerLineWidth + b.LineDistance > 40 Then
+        b.LineStyle = 0: b.LineWidth = 26: b.OuterLineWidth = 26: b.InnerLineWidth = 0: b.LineDistance = 0
+        oCell.BottomBorder = b
+      End If
+      oCell = oSheet.getCellByPosition(c, r + 1)
+      b = oCell.TopBorder
+      If b.OuterLineWidth + b.InnerLineWidth + b.LineDistance > 40 Then
+        b.LineStyle = 0: b.LineWidth = 26: b.OuterLineWidth = 26: b.InnerLineWidth = 0: b.LineDistance = 0
+        oCell.TopBorder = b
+      End If
+    Next c
+  Next r
+End Sub
