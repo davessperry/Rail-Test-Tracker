@@ -45,7 +45,9 @@ h1{font-family:'Barlow Semi Condensed',sans-serif;font-weight:700;font-size:23px
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;}
 .subdiv-head{display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:10px;}
 .subdiv-name{font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;font-size:18px;}
+.big-miles{font-size:16px;font-weight:700;color:var(--ink);}
 .miles-tag{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:13px;color:var(--sub);white-space:nowrap;}
+.miles-tag.big-miles{font-size:16px;font-weight:700;color:var(--ink);}
 /* Track groups: separation comes from a colored edge + a tinted block + a gap
    above/below it -- never a horizontal rule, which reads as underlining
    whatever sits right above it. --trk is set per type by the .trk-* classes. */
@@ -2349,7 +2351,7 @@ function render(){
     };
     const todayOpen = ui.historyOpen ? ui.historyOpen.today !== false : true;
     const earlierOpen = ui.historyOpen ? !!ui.historyOpen.earlier : false;
-    html += `<details ${todayOpen?'open':''} ontoggle="setHistoryOpen('today', this.open)"><summary>Today (${todayEntries.length}) · <strong>${fmt(todayMilesTested())} mi tested</strong></summary>${rowsFor(todayEntries)}</details>`;
+    html += `<details ${todayOpen?'open':''} ontoggle="setHistoryOpen('today', this.open)"><summary>Today (${todayEntries.length}) · <strong class="big-miles">${fmt(todayMilesTested())} mi tested</strong></summary>${rowsFor(todayEntries)}</details>`;
     html += `<details ${earlierOpen?'open':''} ontoggle="setHistoryOpen('earlier', this.open)"><summary>Earlier (${earlierEntries.length})</summary>${rowsFor(earlierEntries, true)}</details>`;
   }
   html += `</div>`;
@@ -2365,7 +2367,7 @@ function render(){
       <div class="subdiv-head">
         <span class="subdiv-name" onclick="toggleCollapse('${sub}')" style="cursor:pointer">${isCollapsed?'▸':'▾'} ${sub}</span>
         <span style="display:flex;align-items:center;gap:8px">
-          <span class="miles-tag">${fmt(totalAll)} mi left</span>
+          <span class="miles-tag big-miles">${fmt(totalAll)} mi left</span>
           <button class="secondary" style="padding:4px 8px;font-size:11px" onclick="moveToTop('${sub}')">Move to top</button>
         </span>
       </div>`;
