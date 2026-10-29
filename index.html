@@ -45,9 +45,12 @@ h1{font-family:'Barlow Semi Condensed',sans-serif;font-weight:700;font-size:23px
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;}
 .subdiv-head{display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:10px;}
 .subdiv-name{font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;font-size:18px;}
-.big-miles{font-size:16px;font-weight:700;color:var(--ink);}
+.big-miles{font-size:16px;font-weight:700;}
 .miles-tag{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:13px;color:var(--sub);white-space:nowrap;}
-.miles-tag.big-miles{font-size:16px;font-weight:700;color:var(--ink);}
+.miles-tag.big-miles{font-size:16px;font-weight:700;color:var(--rail);}
+.big-miles{color:var(--rail);}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .big-miles, :root:not([data-theme="light"]) .miles-tag.big-miles{color:#4fb58f;} }
+:root[data-theme="dark"] .big-miles, :root[data-theme="dark"] .miles-tag.big-miles{color:#4fb58f;}
 /* Track groups: separation comes from a colored edge + a tinted block + a gap
    above/below it -- never a horizontal rule, which reads as underlining
    whatever sits right above it. --trk is set per type by the .trk-* classes. */
